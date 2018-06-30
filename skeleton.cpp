@@ -4,18 +4,20 @@
 #include "db_cxx.h"
 
 // include the sql parser
-#include "SQLParser.h"
+//TODO: change this before submitting with an update to make file
+#include "/usr/local/db6/include/SQLParser.h"
 
 // contains printing utilities
-#include "sqlhelper.h"
+// TODO: change this before submitting with an update to make file
+#include "/usr/local/db6/include/sqlhelper.h"
 
 using namespace std;
 
-string execute();
+string execute(SQLParserResult* result);
 
 int main(int argc, char* argv[])
 {
-  string cmd, path;
+  string cmd, path, statement;
 
   // Ensure user provides path
   if(argc < 2)
@@ -33,7 +35,7 @@ int main(int argc, char* argv[])
                       DB_INIT_MPOOL; // Initialize the in-memory cache.
 
   string envHome(path);
-  DbEnv myEnv(0);
+  DbEnv myEnv(0U);
 
   try {
     myEnv.open(envHome.c_str(), env_flags, 0);
@@ -57,15 +59,35 @@ int main(int argc, char* argv[])
     printf("SQL> ");
     cin >> cmd;
 
-    if(cin == "quit")
+    if(cmd == "quit")
     {
       return 0;
     }
 
+    // parse a given query
+    hsql::SQLParserResult* result = hsql::SQLParser::parseSQLString(cmd);
+
+
+    // check whether the parsing was successful
+    if (result->isValid()) {
+      statement = execute(result);
+      printf("%s\n", statement);
+      delete result;
+    }
+    else
+    {
+      fprintf(stderr, "Given string is not a valid SQL query.\n");
+      fprintf(stderr, "%s (L%d:%d)\n",
+              result->errorMsg(),
+              result->errorLine(),
+              result->errorColumn());
+      delete result;
+      return -1;
+    }
   }
 }
 
-string execute()
+string execute(SQLParserResult* result)
 {
-
+  return "It WORKS";
 }
