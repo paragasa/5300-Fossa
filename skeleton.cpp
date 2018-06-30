@@ -13,7 +13,7 @@
 
 using namespace std;
 
-string execute(SQLParserResult* result);
+string execute(hsql::SQLParserResult* result);
 
 int main(int argc, char* argv[])
 {
@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
   }
 }
 
-string execute(SQLParserResult* result)
+string execute(hsql::SQLParserResult* result)
 {
   return "It WORKS";
 }
