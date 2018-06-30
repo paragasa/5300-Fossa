@@ -57,7 +57,7 @@ int main(int argc, char* argv[])
   while(true)
   {
     printf("SQL> ");
-    cin >> cmd;
+    getline(cin, cmd);
 
     if(cmd == "quit")
     {
@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
     // check whether the parsing was successful
     if (result->isValid()) {
       statement = execute(result);
-      printf("%s\n", statement);
+      cout << statement << endl;
       delete result;
     }
     else
@@ -89,5 +89,12 @@ int main(int argc, char* argv[])
 
 string execute(hsql::SQLParserResult* result)
 {
-  return "It WORKS";
+  string finalQuery;
+
+  for (uint i = 0; i < result->size(); ++i) {
+          // Print a statement summary.
+        finalQuery += printStatmentInfo(result->getStatement(i)) + " ";
+  }
+
+  return finalQuery;
 }
