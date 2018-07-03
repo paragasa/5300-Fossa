@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
     if (result->isValid()) {
       statement = execute(result);
 
-      cout << "state";
+      //cout << "state";
       cout << statement << endl;
       delete result;
     }
@@ -108,6 +108,7 @@ string execute(hsql::SQLParserResult* result)
         finalQuery = handlePrintSelect((const hsql::SelectStatement*)statement);
         break;
       case hsql::kStmtCreate:
+        finalQuery = handlePrintCreate((const hsql::CreateStatement*) statement);
         break;
       default:
         cout << "This SQLStatement is not yet handled \n";
@@ -235,25 +236,39 @@ string handlePrintCreate(const hsql::CreateStatement* statement)
   string query = "CREATE ";
   switch(statement->type)
   {
+    //Create for table
     case hsql::CreateStatement::kTable:
       query += "TABLE ";
       break;
+    //Add other creates here like create database
     default:
-      cout << "This CREATE Type is not yet handled \n";
+      fprintf(stderr, "Unsupported CREATE type %d\n", statement->type);
       break;
   }
   if(statement->ifNotExists)
-    query += "IF NOT EXISTS ";
-  if(statement->tableName != NULL)
   {
-    query += statement->filePath;
+    query += "IF NOT EXISTS ";
   }
 
-  query += statement->tableName;
+  //Create table specific stuff
+  if(statement->tableName != NULL)
+  {
+    query += statement->tableName;
+    query += " (";
+  }
+
 
   if(statement->columns !=NULL)
   {
+    bool firstColumn = true;
     for (hsql::ColumnDefinition* column : *statement->columns) {
+        if(firstColumn)
+        {
+          firstColumn=false;
+        }
+        else{
+          query +=", ";
+        }
         query += column->name;
         switch(column->type)
         {
@@ -266,11 +281,15 @@ string handlePrintCreate(const hsql::CreateStatement* statement)
           case hsql::ColumnDefinition::DOUBLE:
             query += " DOUBLE";
             break;
+
           default:
-            cout << "Unsupported colunn type ";
+            fprintf(stderr, "Unsupported Column type %d\n", column->type);
             break;
         }
+
     }
+    query += ")";
   }
+
   return query;
 }
