@@ -17,7 +17,7 @@ string execute(hsql::SQLParserResult* result);
 string handleOperatorExpression(hsql::Expr* expr);
 string handleExpression(hsql::Expr* expr);
 string handlePrintSelect(const hsql::SelectStatement* statement);
-string handlePrintCreate(hsql::SQLStatement* statement);
+string handlePrintCreate(const hsql::CreateStatement* statement);
 
 
 int main(int argc, char* argv[])
@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
     if (result->isValid()) {
       statement = execute(result);
 
-      cout << "state"
+      cout << "state";
       cout << statement << endl;
       delete result;
     }
@@ -230,12 +230,12 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
 
 //function that takes in a SQLStatement and returns the canonical format as a string
 //for now this should only handle CREATE TABLE
-string handlePrintCreate(hsql::CreateStatement* statement)
+string handlePrintCreate(const hsql::CreateStatement* statement)
 {
   string query = "CREATE ";
   switch(statement->type)
   {
-    case :
+    case hsql::CreateStatement::kTable:
       query += "TABLE ";
       break;
     default:
@@ -255,8 +255,21 @@ string handlePrintCreate(hsql::CreateStatement* statement)
   {
     for (hsql::ColumnDefinition* column : *statement->columns) {
         query += column->name;
-        query += " ";
-        query += column->type;
+        switch(column->type)
+        {
+          case hsql::ColumnDefinition::TEXT:
+            query += " TEXT";
+            break;
+          case hsql::ColumnDefinition::INT:
+            query += " INT";
+            break;
+          case hsql::ColumnDefinition::DOUBLE:
+            query += " DOUBLE";
+            break;
+          default:
+            cout << "Unsupported colunn type ";
+            break;
+        }
     }
   }
   return query;
