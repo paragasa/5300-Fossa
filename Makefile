@@ -12,10 +12,10 @@ OBJS       = skeleton.o
 
 # Rule for linking to create the executable
 # Note that this is the default target since it is the first non-generic one in the Makefile: $ make
-skeleton: $(OBJS)
+cpsc5300: $(OBJS)
 	g++ -L$(LIB_DIR) -o $@ $< -ldb_cxx -lsqlparser
 
 # Rule for removing all non-source files (so they can get rebuilt from scratch)
 # Note that since it is not the first target, you have to invoke it explicitly: $ make clean
 clean:
-	rm -f skeleton *.o
+	rm -f cpsc5300 *.o

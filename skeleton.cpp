@@ -4,12 +4,12 @@
 #include "db_cxx.h"
 
 // include the sql parser
-//TODO: change this before submitting with an update to make file
-#include "/usr/local/db6/include/SQLParser.h"
+
+#include "SQLParser.h"
 
 // contains printing utilities
-// TODO: change this before submitting with an update to make file
-#include "/usr/local/db6/include/sqlhelper.h"
+
+#include "sqlhelper.h"
 
 using namespace std;
 
