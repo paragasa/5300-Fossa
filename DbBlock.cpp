@@ -1,5 +1,5 @@
 /*  DbBlock Class
-*   an abstract class to define blocks for our database
+
 *   Authors Jared Mead, John Nguyen
 */
 using namespace std;
@@ -35,10 +35,22 @@ public:
 
   }
 
-  /**
- * initialize/reinitialize this block to an empty new block.
- */
-void initialize_new() {}
+  //Function Definitions
+  virtual void initialize_new() {}
+  virtual RecordID add(const Dbt* data) throw(DbBlockNoRoomError) = 0;
+  virtual Dbt* get(RecordID record_id) = 0;
+  virtual void put(RecordID record_id, const Dbt &data) throw(DbBlockNoRoomError) = 0;
+  virtual void del(RecordID record_id) = 0;
+  virtual RecordIDs* ids() = 0;
+  //accessors
+  virtual Dbt* get_block() {return &block;}
+  virtual void* get_data() {return block.get_data();}
+  virtual BlockID get_block_id() {return block_id;}
+
+  protected:
+    Dbt block;
+    BlockID block_id;
+};
 
 /**
  * Add a new record to this block.
@@ -46,14 +58,20 @@ void initialize_new() {}
  * @returns     the new RecordID for the new record
  * @throws      DbBlockNoRoomError if insufficient room in the block
  */
-virtual RecordID add(const Dbt* data) throw(DbBlockNoRoomError) = 0;
+virtual RecordID add(const Dbt* data) throw(DbBlockNoRoomError) = 0
+{
+
+}
 
 /**
  * Get a record from this block.
  * @param record_id  which record to fetch
  * @returns          the data stored for the given record
  */
-virtual Dbt* get(RecordID record_id) = 0;
+virtual Dbt* get(RecordID record_id) = 0
+{
+
+}
 
 /**
  * Change the data stored for a record in this block.
@@ -62,41 +80,27 @@ virtual Dbt* get(RecordID record_id) = 0;
  * @throws           DbBlockNoRoomError if insufficient room in the block
  *                   (old record is retained)
  */
-virtual void put(RecordID record_id, const Dbt &data) throw(DbBlockNoRoomError) = 0;
+virtual void put(RecordID record_id, const Dbt &data) throw(DbBlockNoRoomError) = 0
+{
+
+}
 
 /**
  * Delete a record from this block.
  * @param record_id  which record to delete
  */
 virtual void del(RecordID record_id) = 0;
+{
 
+}
 /**
  * Get all the record ids in this block (excluding deleted ones).
  * @returns  pointer to list of record ids (freed by caller)
  */
 virtual RecordIDs* ids() = 0;
+{
 
-/**
- * Access the whole block's memory as a BerkeleyDB Dbt pointer.
- * @returns  Dbt used by this block
- */
-virtual Dbt* get_block() {return &block;}
+}
 
-/**
- * Access the whole block's memory within the BerkeleyDb Dbt.
- * @returns  Raw byte stream of this block
- */
-virtual void* get_data() {return block.get_data();}
-
-/**
- * Get this block's BlockID within its DbFile.
- * @returns this block's id
- */
-virtual BlockID get_block_id() {return block_id;}
-
-protected:
-Dbt block;
-BlockID block_id;
-};
 
 };
