@@ -4,18 +4,19 @@
 #include "db_cxx.h"
 
 // include the sql parser
-//TODO: change this before submitting with an update to make file
-#include "/usr/local/db6/include/SQLParser.h"
+
+#include "SQLParser.h"
 
 // contains printing utilities
-// TODO: change this before submitting with an update to make file
-#include "/usr/local/db6/include/sqlhelper.h"
+
+#include "sqlhelper.h"
 
 using namespace std;
 
 string execute(hsql::SQLParserResult* result);
 string handleOperatorExpression(hsql::Expr* expr);
 string handleExpression(hsql::Expr* expr);
+string handleTable(hsql::TableRef* table);
 string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
 
@@ -127,24 +128,28 @@ string execute(hsql::SQLParserResult* result)
     return "null";
   }
 
+  rtrnQuery += handleExpression(expr->expr);
+  
   switch (expr->opType) {
     case hsql::Expr::SIMPLE_OP:
+      rtrnQuery += " ";
       rtrnQuery += expr->opChar;
+      rtrnQuery += " ";
+      break;
     case hsql::Expr::AND:
-      rtrnQuery += "AND";
+      rtrnQuery += " AND ";
       break;
     case hsql::Expr::OR:
-      rtrnQuery += "OR";
+      rtrnQuery += " OR ";
       break;
     case hsql::Expr::NOT:
-      rtrnQuery += "NOT";
+      rtrnQuery += " NOT ";
       break;
     default:
       rtrnQuery += expr->opType;
       break;
   }
 
-  rtrnQuery += handleExpression(expr->expr);
   if (expr->expr2 != NULL) rtrnQuery += handleExpression(expr->expr2);
 
   return rtrnQuery;
@@ -158,7 +163,10 @@ string handleExpression(hsql::Expr* expr)
     case hsql::kExprStar:
       return "*";
     case hsql::kExprColumnRef:
-      return expr->name;
+      if(expr->table)
+        return string(expr->table) + "." +  expr->name;
+      else
+        return string(expr->name);
     case hsql::kExprLiteralFloat:
       return to_string(expr->fval);
     case hsql::kExprLiteralInt:
@@ -170,7 +178,7 @@ string handleExpression(hsql::Expr* expr)
     case hsql::kExprFunctionRef:
       compoundStmt += expr->name;
       compoundStmt += " ";
-      compoundStmt += expr->expr->name;
+      compoundStmt += handleExpression(expr->expr);
       return compoundStmt;
       break;
     case hsql::kExprOperator:
@@ -183,18 +191,94 @@ string handleExpression(hsql::Expr* expr)
   }
 }
 
+string handleTable(hsql::TableRef* table)
+{
+  string compoundStmt;
+  switch(table->type)
+  {
+      case hsql::kTableName:
+        compoundStmt += table->name;
+        if(table->alias)
+          compoundStmt += string(" AS ") + table->alias;
+        break;
+      case hsql::kTableJoin:
+          compoundStmt += handleTable(table->join->left);
+          switch (table->join->type)
+          {
+            case hsql::kJoinInner:
+              compoundStmt += " JOIN ";
+              break;
+            case hsql::kJoinLeft:
+              compoundStmt += " LEFT JOIN ";
+              break;
+            case hsql::kJoinRight:
+              compoundStmt += " RIGHT JOIN ";
+              break;
+           default:
+              break;
+          }
+          compoundStmt += handleTable(table->join->right);
+          if (table->join->condition)
+            compoundStmt += " ON " + handleExpression(table->join->condition);
+          break;
+      default:
+        fprintf(stderr, "Unrecognized expression type %d\n", table->type);
+        return " ";
+        break; 
+  }
+  return compoundStmt;
+}
+
 string handlePrintSelect(const hsql::SelectStatement* statement)
 {
   string query;
 
   query += "SELECT ";
 
+  bool firstColumn = true;
   for (hsql::Expr* expr : *statement->selectList)
   {
-    query += handleExpression(expr);
+      if(firstColumn)
+        {
+          firstColumn=false;
+        }
+      else{
+        query +=", ";
+      }
+
+      query += handleExpression(expr);
   }
 
-  query += " FROM ";
+   query += " FROM ";
+
+   query += handleTable(statement->fromTable);
+
+  //  printTableRefInfo(stmt->fromTable, numIndent + 2);
+
+  if (statement->whereClause != NULL) {
+    query += " WHERE ";
+      query += handleExpression(statement->whereClause);
+  }
+
+
+  // if (stmt->unionSelect != NULL) {
+  //   query += " UNION "
+  //   printSelectStatementInfo(stmt->unionSelect, numIndent + 2);
+  // }
+
+  if (statement->order != NULL) {
+    query += " ORDER BY ";
+    query += handleExpression(statement->order->at(0)->expr);
+                              if (statement->order->at(0)->type == hsql::kOrderAsc) query += " ASCENDING ";
+                              else query += " DESCENDING ";
+                              }
+
+      if (statement->limit != NULL) {
+        // inprint("Limit:", numIndent + 1);
+        query += " LIMIT ";
+        query += statement->limit->limit;
+      }
+
 
   /*
   printTableRefInfo(stmt->fromTable, numIndent + 2);
