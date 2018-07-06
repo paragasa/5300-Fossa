@@ -12,6 +12,7 @@ using namespace std;
 
 typedef u_int16_t RecordID;
 typedef vector<RecordID> RecordIDs;
+//typedef vector<BlockID> BlockIDs;
 static const uint BLOCK_SZ = 4096;
 
 
@@ -165,22 +166,22 @@ RecordID SlottedPage::add(const Dbt* data) throw(DbBlockNoRoomError)
 Dbt* SlottedPage::get(RecordID record_id)
 {
 
-    //retrieve header
-    u_int16_t size;
-    u_int16_t loc;
-    get_header(size,loc,record_id);
-    //if the location is zero this means the record is deleted
-    if(!loc == 0)
-    {
-      //construct berkeleyDB:Dbt with data
-      Dbt* result = new Dbt(this->address(loc), size);
-      return result;
-    }
-    else
-    {
-      return NULL; //need to do something if its deleted
-    }
-    return NULL;
+  //retrieve header
+  u_int16_t size;
+  u_int16_t loc;
+  get_header(size,loc,record_id);
+  //if the location is zero this means the record is deleted
+  if(!loc == 0)
+  {
+    //construct berkeleyDB:Dbt with data
+    Dbt* result = new Dbt(this->address(loc), size);
+    return result;
+  }
+  else
+  {
+    return NULL; //need to do something if its deleted
+  }
+  return NULL;
 }
 
 //updates a record using an ID and data
@@ -240,9 +241,10 @@ void HeapFile::db_open(uint flags)
   //Set the record length to the block size this is defined in storage_engine.h
   this->db.set_re_len(BLOCK_SZ);
   //set dbfilename
-  //this->dbfilename  = path(_DB_ENV + this->name + ".db");
+  //path is normally created at the time of the environment creation
   //hardcoded for now
-  this->dbfilename  = "../Data/poop.db";
+
+  this->dbfilename  = "../Data/HeapTest.db";
   //python self.dbfilename = os.path.join(_DB_ENV, self.name + '.db')
   //Null txnid is not transaction protected, 0 mode is default
   this->db.open(nullptr ,this->dbfilename.c_str(),this->name.c_str(),DB_RECNO,(u_int32_t)flags,0);
@@ -268,21 +270,28 @@ void HeapFile::create(void)
   this->put(block);
 }
 
-//delete heapfile function
+//delete physical heapfile
 void HeapFile::drop(void)
 {
-
+  this->close();
+  //std function to remove a file based on path
+  remove(dbfilename.c_str());
 }
 
 //Open File
 void HeapFile::open(void)
 {
-  this->db_open(0U);
+  this->db_open();
+  //block_size is set already
 }
+
+
 void HeapFile::close(void)
 {
-
+  this->db.close(0);
+  this->closed= true;
 }
+
 //given in the assignment description
 //Allocates a block for the database files
 // Returns a SlottedPage that is empty for managing records
@@ -303,26 +312,40 @@ SlottedPage* HeapFile::get_new(void)
   this->db.get(nullptr, &key, &data, 0);
   return page;
 }
+
+//Retrieves a SlottedPage/Block, using a BlockID
 SlottedPage* HeapFile::get(BlockID block_id)
 {
- return NULL;
+  //allocate memory for the variable
+  //Db::get(DbTxn *txnid, Dbt *key, Dbt *data, u_int32_t flags);
+  Dbt key(&block_id, sizeof(block_id));
+  Dbt data;
+  this->db.get(nullptr, &key, &data, 0);
+  SlottedPage* page = new  SlottedPage(data, block_id);
+  return page;
 }
 
 
 
 //Handle for berkeleyDB Db::put
-//int Db::put(DbTxn *txnid, Dbt *key, Dbt *data, u_int32_t flags);
 void HeapFile::put(DbBlock* block)
 {
   //get_block(),get_block_id are defined in storage_engine.h
   BlockID block_id = block->get_block_id();
   Dbt key(&block_id, sizeof(block_id));
+  //int Db::put(DbTxn *txnid, Dbt *key, Dbt *data, u_int32_t flags);
   this->db.put(nullptr, &key,block->get_block(),0);
 }
 
+//Returns a vector of BlockIds
 BlockIDs* HeapFile::block_ids()
 {
-  return NULL;
+  BlockIDs* results = new BlockIDs;
+  for(BlockID id=1; id<=this->last+1; id++)
+  {
+    results->push_back(id);
+  }
+  return results;
 }
 
 //END HEAPFILE
