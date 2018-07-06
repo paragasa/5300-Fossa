@@ -217,3 +217,218 @@ void SlottedPage::del(RecordID record_id)
   //compact the records space
   slide(loc, loc + size);
 }
+
+
+// BEGIN HeapTable
+
+/*
+ *    CONSTRUCTOR
+ *
+ *    Takes the name of the relation, the columns (in order),
+ *    and all the column attributes (e.g., it's data type, any constraints,
+ *    is it allowed to be null, etc.)
+ *    It's not the job of DbRelation to track all this information.
+ */
+HeapTable::HeapTable(Identifier table_name, ColumnNames column_names,
+                     ColumnAttributes column_attributes )
+{
+
+}
+
+/*
+ *  DESTRUCTOR
+ */
+HeapTable::~HeapTable()
+{
+
+}
+
+/*
+ *  Corresponds to CREATE TABLE.
+ *
+ *  At minimum, it presumably sets up the DbFile and calls its create method.
+ *
+ *  Throws exception if the table already exists
+ */
+void HeapTable::create()
+{
+
+}
+
+/*
+ *  Corresponds to CREATE TABLE IF NOT EXISTS.
+ *
+ *  Whereas create will throw an exception if the table already exists,
+ *  this method will just open the table if it already exists.
+ */
+void HeapTable::create_if_not_exists()
+{
+
+}
+
+/*
+ *  Opens the table for insert, update, delete, select, and project methods
+ */
+void HeapTable::open()
+{
+
+}
+
+/*
+ *  Closes the table, temporarily disabling insert, update, delete, select,
+ *  and project methods
+ */
+void HeapTable::close()
+{
+
+}
+
+/*
+ * Corresponds to DROP TABLE.
+ *
+ * Deletes the underlying DbFile.
+ */
+void HeapTable::drop()
+{
+
+}
+
+/*
+ *  Corresponds to INSERT INTO TABLE.
+ *
+ *  Takes a proposed row and adds it to the table.
+ *  This is the method that determines the block to write it to and marshals
+ *  the data and writes it to the block.
+ *  It is also responsible for handling any constraints, applying defaults, etc.
+ *
+ *  NOTE: FOR MILESTONE 2 INSERT ONLY HANDLES INTEGER AND TEXT, NULL VALUES
+ *  OR ANY OTHER COLUMN ATTRIBUTES ARE NOT HANDLED
+ */
+Handle HeapTable::insert(const ValueDict* row)
+{
+
+}
+
+/*
+ *  Corresponds to UPDATE.
+ *
+ *  Like insert, but only applies specific field changes,
+ *  keeping other fields as they were before.
+ *  Same logic as insert for constraints, defaults, etc.
+ *  The client needs to first obtain a handle to the row that is meant to be
+ *  updated either from insert or from select.
+ *
+ *  NOTE: FOR MILESTONE 2 UPDATE IS NOT SUPPORTED
+ */
+void HeapTable::update(const Handle handle, const ValueDict* new_values)
+{
+  printf("Update is not yet handled.");
+}
+
+/*
+ *  Corresponds to DELETE FROM.
+ *
+ *  Deletes a row for a given row handle (obtained from insert or select).
+ *
+ *  NOTE: FOR MILESTONE 2 DELETE IS NOT SUPPORTED
+ */
+void HeapTable::del(const Handle handle)
+{
+  printf("Update is not yet handled.");
+}
+
+/*
+ *  Corresponds to SELECT * FROM
+ *
+ *  Returns handles to the matching rows.
+ */
+ Handles* HeapTable::select(const ValueDict* where) {
+     Handles* handles = new Handles();
+     BlockIDs* block_ids = file.block_ids();
+     for (auto const& block_id: *block_ids) {
+         SlottedPage* block = file.get(block_id);
+         RecordIDs* record_ids = block->ids();
+         for (auto const& record_id: *record_ids)
+             handles->push_back(Handle(block_id, record_id));
+         delete record_ids;
+         delete block;
+     }
+     delete block_ids;
+     return handles;
+ }
+
+/*
+ *  Corresponds to SELECT * FROM ... WHERE
+ *
+ *  Returns handles to the matching rows.
+ *
+ *  NOTE: WHERE, GROUP BY, AND LIMIT ARE NOT YET HANDLED,
+ *  THIS FUNCTION INSTEAD SIMPLY CALLS SELECT() WITHOUT ANY PARAMETERS
+ */
+Handles* HeapTable::select(const ValueDict* where)
+{
+  return select();
+}
+
+/*
+ *   Extracts all fields from a row handle.
+ */
+ValueDict* HeapTable::project(Handle handle)
+{
+
+}
+
+/*
+ *  Extracts specific fields from a row handle.
+ */
+ValueDict* HeapTable::project(Handle handle, const ColumnNames* column_names)
+{
+
+}
+
+// Protected Functions
+ValueDict* HeapTable::validate(const ValueDict* row)
+{
+
+}
+
+Handle HeapTable::append(const ValueDict* row)
+{
+
+}
+
+// return the bits to go into the file
+// caller responsible for freeing the returned Dbt and its enclosed ret->get_data().
+Dbt* HeapTable::marshal(const ValueDict* row) {
+    // more than we need (we insist that one row fits into DbBlock::BLOCK_SZ)
+    char *bytes = new char[DbBlock::BLOCK_SZ];
+    uint offset = 0;
+    uint col_num = 0;
+    for (auto const& column_name: this->column_names) {
+        ColumnAttribute ca = this->column_attributes[col_num++];
+        ValueDict::const_iterator column = row->find(column_name);
+        Value value = column->second;
+        if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
+            *(int32_t*) (bytes + offset) = value.n;
+            offset += sizeof(int32_t);
+        } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
+            uint size = value.s.length();
+            *(u16*) (bytes + offset) = size;
+            offset += sizeof(u16);
+            memcpy(bytes+offset, value.s.c_str(), size); // assume ascii for now
+            offset += size;
+        } else {
+            throw DbRelationError("Only know how to marshal INT and TEXT");
+        }
+    }
+    char *right_size_bytes = new char[offset];
+    memcpy(right_size_bytes, bytes, offset);
+    delete[] bytes;
+    Dbt *data = new Dbt(right_size_bytes, offset);
+    return data;
+}
+
+ValueDict* HeapTable::unmarshal(Dbt* data)
+{
+
+}
