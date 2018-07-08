@@ -124,6 +124,7 @@ public:
 
 protected:
 	HeapFile file;
+	bool isCreated;
 	virtual ValueDict* validate(const ValueDict* row);
 	virtual Handle append(const ValueDict* row);
 	virtual Dbt* marshal(const ValueDict* row);
@@ -131,4 +132,3 @@ protected:
 };
 
 bool test_heap_storage();
-
