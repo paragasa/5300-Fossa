@@ -220,32 +220,6 @@ void SlottedPage::del(RecordID record_id)
 
 
 // BEGIN HeapTable
-
-
-
-/*
- *    CONSTRUCTOR
- *
- *    Takes the name of the relation, the columns (in order),
- *    and all the column attributes (e.g., it's data type, any constraints,
- *    is it allowed to be null, etc.)
- *    It's not the job of DbRelation to track all this information.
- */
-HeapTable::HeapTable(Identifier table_name, ColumnNames column_names,
-                     ColumnAttributes column_attributes )
-{
-    file = HeapFile(table_name);
-    isCreated = false;
-}
-
-/*
- *  DESTRUCTOR
- */
-HeapTable::~HeapTable()
-{
-
-}
-
 /*
  *  Corresponds to CREATE TABLE.
  *
@@ -290,7 +264,7 @@ void HeapTable::create_if_not_exists()
  */
 void HeapTable::open()
 {
-  file.open()
+  file.open();
 }
 
 /*
@@ -325,37 +299,8 @@ void HeapTable::drop()
  */
 Handle HeapTable::insert(const ValueDict* row)
 {
-  BlockIDs* block_ids = file.block_ids();
-  Dbt* marshalledRow = marshal(row);
-  BlockId insertedBlockId;
-  RecordId insertedRecId;
-
-  bool blockAdded = false;
-
-  for (auto const& block_id: *block_ids) {
-      SlottedPage* block = file.get(block_id);
-      if(!blockAdded)
-      {
-        try
-        {
-          insertedRecId = block.add(marshalledRow);
-          insertedBlockId = block_id;
-          blockAdded = true;
-        }
-        catch(DbBlockNoRoomError& e)
-        {
-          blockAdded = false;
-        }
-      }
-
-      delete block;
-  }
-
-  delete marshalledRow->get_data();
-  delete marshalledRow;
-  delete block_ids;
-
-  return Handle(insertedBlockId, insertedBlockId)
+  open();
+  return append(validate(row));
 }
 
 
@@ -392,7 +337,7 @@ void HeapTable::del(const Handle handle)
  *
  *  Returns handles to the matching rows.
  */
- Handles* HeapTable::select(const ValueDict* where) {
+ Handles* HeapTable::select() {
      Handles* handles = new Handles();
 
      BlockIDs* block_ids = file.block_ids();
@@ -443,7 +388,7 @@ ValueDict* HeapTable::project(Handle handle)
   Dbt* record = page->get(record_id);
 
   // Unmarshal data for returning
-  ValueDict* returnVal = unmarshal(Dbt* data);
+  ValueDict* returnVal = unmarshal(record);
 
   // Free Memory
   delete record;
@@ -469,14 +414,14 @@ ValueDict* HeapTable::project(Handle handle, const ColumnNames* column_names)
   Dbt* record = page->get(record_id);
 
   // Unmarshal data for returning
-  ValueDict* retrievedVal = unmarshal(Dbt* data);
+  ValueDict* retrievedVal = unmarshal(record);
   ValueDict* returnVal = new ValueDict;
-  for(auto const& column_name: column_names)
+  for(auto const& column_name: *column_names)
   {
-    ValueDict::const_iterator column = row->find(column_name);
+    ValueDict::const_iterator column = retrievedVal->find(column_name);
     Value value = column->second;
-    returnVal.insert(column, value);
-    
+    returnVal->insert(pair<Identifier, Value>(column_name, value));
+
   }
 
   // Free Memory
@@ -490,7 +435,8 @@ ValueDict* HeapTable::project(Handle handle, const ColumnNames* column_names)
 // Protected Functions
 ValueDict* HeapTable::validate(const ValueDict* row)
 {
-  ValueDict* fullRow;
+  ValueDict* fullRow = new ValueDict();
+  uint col_num = 0;
 
   for (auto const& column_name: this->column_names) {
     ColumnAttribute ca = this->column_attributes[col_num++];
@@ -503,7 +449,7 @@ ValueDict* HeapTable::validate(const ValueDict* row)
     }
     else
     {
-      fullRow.insert(pair<Identifier,Value>(column, value));
+      fullRow->insert(pair<Identifier, Value>(column_name, value));
     }
   }
 
@@ -514,19 +460,22 @@ Handle HeapTable::append(const ValueDict* row)
 {
   Dbt* data = marshal(row);
   SlottedPage* block = file.get(file.get_last_block_id());
+  RecordID record_id;
 
   try
   {
-    RecordID = block.add(data);
+    record_id = block->add(data);
   }
   catch(DbBlockNoRoomError e)
   {
     delete block;
     block = file.get_new();
-    RecordID record_id = block.add(data);
+    record_id = block->add(data);
   }
   file.put(block);
-  return pair(file.get_last_block_id, record_id);
+
+  Handle retHandle = pair<BlockID, RecordID>(file.get_last_block_id(), record_id);
+  return retHandle;
 }
 
 // return the bits to go into the file
@@ -545,8 +494,8 @@ Dbt* HeapTable::marshal(const ValueDict* row) {
             offset += sizeof(int32_t);
         } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
             uint size = value.s.length();
-            *(u16*) (bytes + offset) = size;
-            offset += sizeof(u16);
+            *(u_int16_t*) (bytes + offset) = size;
+            offset += sizeof(u_int16_t);
             memcpy(bytes+offset, value.s.c_str(), size); // assume ascii for now
             offset += size;
         } else {
@@ -563,25 +512,25 @@ Dbt* HeapTable::marshal(const ValueDict* row) {
 // typedef std::map<Identifier, Value> ValueDict;
 ValueDict* HeapTable::unmarshal(Dbt* data)
 {
-  ValueDict* retData;
-  uint offset = 0;
+  ValueDict* retData = new ValueDict();
   uint col_num = 0;
 
 
   for (auto const& column_name: this->column_names) {
 
       ColumnAttribute ca = this->column_attributes[col_num++];
-      ValueDict::const_iterator column = column_name;
+      Value value;
+      void * dbtData = data->get_data();
 
       if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
-          Value value = (int) data.get_data();
-          retData.insert(pair<Identifier,Value>(column, value));
+          memcpy(&value, &dbtData, sizeof(int32_t));
       } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
-          Value value = (string) data.get_data();
-          retData.insert(pair<Identifier,Value>(column, value));
+          value =  reinterpret_cast<string &>(dbtData);
       } else {
           throw DbRelationError("Only know how to marshal INT and TEXT");
       }
+
+      retData->insert(pair<Identifier, Value>(column_name, value));
   }
 
   return retData;
