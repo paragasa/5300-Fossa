@@ -215,6 +215,9 @@ void SlottedPage::del(RecordID record_id)
   slide(loc, loc + size);
 }
 
+
+
+
 //END SLOTTED page
 
 //START HeapFile
@@ -349,3 +352,321 @@ BlockIDs* HeapFile::block_ids()
 }
 
 //END HEAPFILE
+
+// BEGIN HeapTable
+/*
+ *  Corresponds to CREATE TABLE.
+ *
+ *  At minimum, it presumably sets up the DbFile and calls its create method.
+ *
+ *  Throws exception if the table already exists
+ */
+void HeapTable::create()
+{
+  if(!isCreated)
+  {
+    file.create();
+    isCreated = true;
+  }
+  else
+  {
+    throw DbRelationError("TABLE IS ALREADY CREATED");
+  }
+}
+
+/*
+ *  Corresponds to CREATE TABLE IF NOT EXISTS.
+ *
+ *  Whereas create will throw an exception if the table already exists,
+ *  this method will just open the table if it already exists.
+ */
+void HeapTable::create_if_not_exists()
+{
+  if(!isCreated)
+  {
+    file.create();
+    isCreated = true;
+  }
+  else
+  {
+    file.open();
+  }
+}
+
+/*
+ *  Opens the table for insert, update, delete, select, and project methods
+ */
+void HeapTable::open()
+{
+  file.open();
+}
+
+/*
+ *  Closes the table, temporarily disabling insert, update, delete, select,
+ *  and project methods
+ */
+void HeapTable::close()
+{
+  file.close();
+}
+
+/*
+ * Corresponds to DROP TABLE.
+ *
+ * Deletes the underlying DbFile.
+ */
+void HeapTable::drop()
+{
+  file.drop();
+}
+
+/*
+ *  Corresponds to INSERT INTO TABLE.
+ *
+ *  Takes a proposed row and adds it to the table.
+ *  This is the method that determines the block to write it to and marshals
+ *  the data and writes it to the block.
+ *  It is also responsible for handling any constraints, applying defaults, etc.
+ *
+ *  NOTE: FOR MILESTONE 2 INSERT ONLY HANDLES INTEGER AND TEXT, NULL VALUES
+ *  OR ANY OTHER COLUMN ATTRIBUTES ARE NOT HANDLED
+ */
+Handle HeapTable::insert(const ValueDict* row)
+{
+  open();
+  return append(validate(row));
+}
+
+
+/*
+ *  Corresponds to UPDATE.
+ *
+ *  Like insert, but only applies specific field changes,
+ *  keeping other fields as they were before.
+ *  Same logic as insert for constraints, defaults, etc.
+ *  The client needs to first obtain a handle to the row that is meant to be
+ *  updated either from insert or from select.
+ *
+ *  NOTE: FOR MILESTONE 2 UPDATE IS NOT SUPPORTED
+ */
+void HeapTable::update(const Handle handle, const ValueDict* new_values)
+{
+  printf("Update is not yet handled.");
+}
+
+/*
+ *  Corresponds to DELETE FROM.
+ *
+ *  Deletes a row for a given row handle (obtained from insert or select).
+ *
+ *  NOTE: FOR MILESTONE 2 DELETE IS NOT SUPPORTED
+ */
+void HeapTable::del(const Handle handle)
+{
+  printf("Delete is not yet handled.");
+}
+
+/*
+ *  Corresponds to SELECT * FROM
+ *
+ *  Returns handles to the matching rows.
+ */
+ Handles* HeapTable::select() {
+     Handles* handles = new Handles();
+
+     BlockIDs* block_ids = file.block_ids();
+
+     for (auto const& block_id: *block_ids) {
+         SlottedPage* block = file.get(block_id);
+         RecordIDs* record_ids = block->ids();
+
+         for (auto const& record_id: *record_ids)
+             handles->push_back(Handle(block_id, record_id));
+
+         delete record_ids;
+         delete block;
+     }
+
+     delete block_ids;
+
+     return handles;
+ }
+
+/*
+ *  Corresponds to SELECT * FROM ... WHERE
+ *
+ *  Returns handles to the matching rows.
+ *
+ *  NOTE: WHERE, GROUP BY, AND LIMIT ARE NOT YET HANDLED,
+ *  THIS FUNCTION INSTEAD SIMPLY CALLS SELECT() WITHOUT ANY PARAMETERS
+ */
+Handles* HeapTable::select(const ValueDict* where)
+{
+  return select();
+}
+
+/*
+ *   Extracts all fields from a row handle.
+ */
+ValueDict* HeapTable::project(Handle handle)
+{
+  // Get block id from handle
+  BlockID block_id = get<0>(handle);
+  // Get record id from handle;
+  RecordID record_id = get<1>(handle);
+
+  // Retrieve the page from the block provided by handle
+  SlottedPage* page = file.get(block_id);
+
+  // Retrieve the record from the page
+  Dbt* record = page->get(record_id);
+
+  // Unmarshal data for returning
+  ValueDict* returnVal = unmarshal(record);
+
+  // Free Memory
+  delete record;
+  delete page;
+
+  return returnVal;
+}
+
+/*
+ *  Extracts specific fields from a row handle.
+ */
+ValueDict* HeapTable::project(Handle handle, const ColumnNames* column_names)
+{
+  // Get block id from handle
+  BlockID block_id = get<0>(handle);
+  // Get record id from handle;
+  RecordID record_id = get<1>(handle);
+
+  // Retrieve the page from the block provided by handle
+  SlottedPage* page = file.get(block_id);
+
+  // Retrieve the record from the page
+  Dbt* record = page->get(record_id);
+
+  // Unmarshal data for returning
+  ValueDict* retrievedVal = unmarshal(record);
+  ValueDict* returnVal = new ValueDict;
+  for(auto const& column_name: *column_names)
+  {
+    ValueDict::const_iterator column = retrievedVal->find(column_name);
+    Value value = column->second;
+    returnVal->insert(pair<Identifier, Value>(column_name, value));
+
+  }
+
+  // Free Memory
+  delete record;
+  delete page;
+  delete retrievedVal;
+
+  return returnVal;
+}
+
+// Protected Functions
+ValueDict* HeapTable::validate(const ValueDict* row)
+{
+  ValueDict* fullRow = new ValueDict();
+  uint col_num = 0;
+
+  for (auto const& column_name: this->column_names) {
+    ColumnAttribute ca = this->column_attributes[col_num++];
+    ValueDict::const_iterator column = row->find(column_name);
+    Value value = column->second;
+
+    if (ca.get_data_type() != ColumnAttribute::DataType::INT || ca.get_data_type()
+    != ColumnAttribute::DataType::TEXT) {
+      throw DbRelationError("Only know how to marshal INT and TEXT");
+    }
+    else
+    {
+      fullRow->insert(pair<Identifier, Value>(column_name, value));
+    }
+  }
+
+  return fullRow;
+}
+
+Handle HeapTable::append(const ValueDict* row)
+{
+  Dbt* data = marshal(row);
+  SlottedPage* block = file.get(file.get_last_block_id());
+  RecordID record_id;
+
+  try
+  {
+    record_id = block->add(data);
+  }
+  catch(DbBlockNoRoomError e)
+  {
+    delete block;
+    block = file.get_new();
+    record_id = block->add(data);
+  }
+  file.put(block);
+
+  Handle retHandle = pair<BlockID, RecordID>(file.get_last_block_id(), record_id);
+  return retHandle;
+}
+
+// return the bits to go into the file
+// caller responsible for freeing the returned Dbt and its enclosed ret->get_data().
+Dbt* HeapTable::marshal(const ValueDict* row) {
+    // more than we need (we insist that one row fits into DbBlock::BLOCK_SZ)
+    char *bytes = new char[DbBlock::BLOCK_SZ];
+    uint offset = 0;
+    uint col_num = 0;
+    for (auto const& column_name: this->column_names) {
+        ColumnAttribute ca = this->column_attributes[col_num++];
+        ValueDict::const_iterator column = row->find(column_name);
+        Value value = column->second;
+        if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
+            *(int32_t*) (bytes + offset) = value.n;
+            offset += sizeof(int32_t);
+        } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
+            uint size = value.s.length();
+            *(u_int16_t*) (bytes + offset) = size;
+            offset += sizeof(u_int16_t);
+            memcpy(bytes+offset, value.s.c_str(), size); // assume ascii for now
+            offset += size;
+        } else {
+            throw DbRelationError("Only know how to marshal INT and TEXT");
+        }
+    }
+    char *right_size_bytes = new char[offset];
+    memcpy(right_size_bytes, bytes, offset);
+    delete[] bytes;
+    Dbt *data = new Dbt(right_size_bytes, offset);
+    return data;
+}
+
+// typedef std::map<Identifier, Value> ValueDict;
+ValueDict* HeapTable::unmarshal(Dbt* data)
+{
+  ValueDict* retData = new ValueDict();
+  uint col_num = 0;
+
+
+  for (auto const& column_name: this->column_names) {
+
+      ColumnAttribute ca = this->column_attributes[col_num++];
+      Value value;
+      void * dbtData = data->get_data();
+
+      if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
+          memcpy(&value, &dbtData, sizeof(int32_t));
+      } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
+          value =  reinterpret_cast<string &>(dbtData);
+      } else {
+          throw DbRelationError("Only know how to marshal INT and TEXT");
+      }
+
+      retData->insert(pair<Identifier, Value>(column_name, value));
+  }
+
+  return retData;
+
+}
