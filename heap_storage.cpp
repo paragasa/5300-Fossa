@@ -12,6 +12,9 @@ using namespace std;
 
 typedef u_int16_t RecordID;
 typedef vector<RecordID> RecordIDs;
+//typedef vector<BlockID> BlockIDs;
+static const uint BLOCK_SZ = 4096;
+
 
 //constructor
 SlottedPage::SlottedPage(Dbt &block, BlockID block_id, bool is_new) : DbBlock(block, block_id, is_new)
@@ -129,13 +132,6 @@ void SlottedPage::slide(u_int16_t start, u_int16_t end)
   }
 }
 
-// not sure what this stuff does yet
-//SlottedPage(const SlottedPage& other) = delete;
-//SlottedPage(SlottedPage&& temp) = delete;
-//SlottedPage& operator=(const SlottedPage& other) = delete;
-//SlottedPage& operator=(SlottedPage& temp) = delete;
-//
-
 //adds data as a new record to the slotted page block
 RecordID SlottedPage::add(const Dbt* data) throw(DbBlockNoRoomError)
 {
@@ -170,22 +166,22 @@ RecordID SlottedPage::add(const Dbt* data) throw(DbBlockNoRoomError)
 Dbt* SlottedPage::get(RecordID record_id)
 {
 
-    //retrieve header
-    u_int16_t size;
-    u_int16_t loc;
-    get_header(size,loc,record_id);
-    //if the location is zero this means the record is deleted
-    if(!loc == 0)
-    {
-      //construct berkeleyDB:Dbt with data
-      Dbt* result = new Dbt(this->address(loc), size);
-      return result;
-    }
-    else
-    {
-      return NULL; //need to do something if its deleted
-    }
-    return NULL;
+  //retrieve header
+  u_int16_t size;
+  u_int16_t loc;
+  get_header(size,loc,record_id);
+  //if the location is zero this means the record is deleted
+  if(!loc == 0)
+  {
+    //construct berkeleyDB:Dbt with data
+    Dbt* result = new Dbt(this->address(loc), size);
+    return result;
+  }
+  else
+  {
+    return NULL; //need to do something if its deleted
+  }
+  return NULL;
 }
 
 //updates a record using an ID and data
@@ -212,12 +208,150 @@ void SlottedPage::del(RecordID record_id)
 {
   u_int16_t size;
   u_int16_t loc;
+
   get_header(size,loc,record_id);
   put_header(record_id,0 ,0);
   //compact the records space
   slide(loc, loc + size);
 }
 
+
+
+
+//END SLOTTED page
+
+//START HeapFile
+//constructor might be complete in the header
+//HeapFile::HeapFile(string name) : DbFile(name), dbfilename(""), last(0), closed(true), db(_DB_ENV, 0)
+//{}
+
+//opens the berkeleyDB
+//int Db::open(DbTxn *txnid, const char *file,
+//    const char *database, DBTYPE type, u_int32_t flags, int mode);
+//DB class API docs https://web.stanford.edu/class/cs276a/projects/docs/berkeleydb/api_cxx/db_open.html
+void HeapFile::db_open(uint flags)
+{
+  //protected variable closed
+  if (!this->closed)
+  {
+    //The db is already open
+    return;
+  }
+  //create a db handle using db_create
+  DB* db_ptr= this->db.get_DB();
+  DB_ENV* dbenv_ptr = _DB_ENV->get_DB_ENV();
+  db_create(&db_ptr, dbenv_ptr, flags);
+  //Set the record length to the block size this is defined in storage_engine.h
+  this->db.set_re_len(BLOCK_SZ);
+  //set dbfilename
+  //path is normally created at the time of the environment creation
+  //hardcoded for now
+
+  this->dbfilename  = "../Data/HeapTest.db";
+  //python self.dbfilename = os.path.join(_DB_ENV, self.name + '.db')
+  //Null txnid is not transaction protected, 0 mode is default
+  this->db.open(nullptr ,this->dbfilename.c_str(),this->name.c_str(),DB_RECNO,(u_int32_t)flags,0);
+
+
+  // This creates a statistical structure and stores it in stat
+  // However stat does not appear to be a variable in the HeapFile class
+  //(void*) stat;
+  //this->db.stat(stat, DB_FAST_STAT);
+  //this->last = stat['ndata'];
+
+  this->closed = false;
+
+}
+
+//creates the physical Heapfile for DB
+void HeapFile::create(void)
+{
+  //need to open the DB
+  this->db_open(0U);
+  //create a new block
+  SlottedPage* block = this->get_new();
+  this->put(block);
+}
+
+//delete physical heapfile
+void HeapFile::drop(void)
+{
+  this->close();
+  //std function to remove a file based on path
+  remove(dbfilename.c_str());
+}
+
+//Open File
+void HeapFile::open(void)
+{
+  this->db_open();
+  //block_size is set already
+}
+
+
+void HeapFile::close(void)
+{
+  this->db.close(0);
+  this->closed= true;
+}
+
+//given in the assignment description
+//Allocates a block for the database files
+// Returns a SlottedPage that is empty for managing records
+SlottedPage* HeapFile::get_new(void)
+{
+  //char block[DB_BLOCK_SZ];
+  char block[BLOCK_SZ];
+  memset(block,0,sizeof(block));
+  Dbt data(block,sizeof(block));
+  //last is u_int32_t
+  int block_id= ++this->last;
+  Dbt key(&block_id, sizeof(block_id));
+
+    // write out an empty block and read it back in so Berkeley DB is managing the memory
+  SlottedPage* page = new SlottedPage(data, this->last, true);
+  // write it out with initialization applied
+  this->db.put(nullptr, &key, &data, 0);
+  this->db.get(nullptr, &key, &data, 0);
+  return page;
+}
+
+//Retrieves a SlottedPage/Block, using a BlockID
+SlottedPage* HeapFile::get(BlockID block_id)
+{
+  //allocate memory for the variable
+  //Db::get(DbTxn *txnid, Dbt *key, Dbt *data, u_int32_t flags);
+  Dbt key(&block_id, sizeof(block_id));
+  Dbt data;
+  this->db.get(nullptr, &key, &data, 0);
+  SlottedPage* page = new  SlottedPage(data, block_id);
+  return page;
+}
+
+
+
+//Handle for berkeleyDB Db::put
+void HeapFile::put(DbBlock* block)
+{
+  //get_block(),get_block_id are defined in storage_engine.h
+  BlockID block_id = block->get_block_id();
+  Dbt key(&block_id, sizeof(block_id));
+  //int Db::put(DbTxn *txnid, Dbt *key, Dbt *data, u_int32_t flags);
+  this->db.put(nullptr, &key,block->get_block(),0);
+}
+
+//Returns a vector of BlockIds
+BlockIDs* HeapFile::block_ids()
+{
+  BlockIDs* results = new BlockIDs;
+  for(BlockID id=1; id<=this->last+1; id++)
+  {
+    results->push_back(id);
+  }
+  return results;
+}
+
+//END HEAPFILE
 
 // BEGIN HeapTable
 /*
