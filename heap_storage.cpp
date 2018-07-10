@@ -363,6 +363,12 @@ BlockIDs* HeapFile::block_ids()
  *
  *  Throws exception if the table already exists
  */
+ HeapTable::HeapTable(Identifier table_name, ColumnNames column_names, ColumnAttributes column_attributes )
+   : DbRelation(table_name, column_names, column_attributes), file(table_name)
+ {
+   isCreated = false;
+ }
+
 void HeapTable::create()
 {
   if(!isCreated)
