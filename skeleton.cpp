@@ -22,7 +22,7 @@ string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
 
 
-DbEnv* _DB_ENV;
+//DbEnv* _DB_ENV;
 
 
 int main(int argc, char* argv[])
@@ -59,6 +59,7 @@ int main(int argc, char* argv[])
     std::cerr << e.what() << std::endl;
     exit(-1);
   }
+  cout << "GREETINGS /n";
   _DB_ENV = &myEnv;
   //Test Function for milestone 2
   //test
@@ -103,6 +104,7 @@ int main(int argc, char* argv[])
 
   }
   */
+  return 0;
 }
 
 string execute(hsql::SQLParserResult* result)

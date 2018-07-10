@@ -15,6 +15,7 @@ typedef vector<RecordID> RecordIDs;
 //typedef vector<BlockID> BlockIDs;
 static const uint BLOCK_SZ = 4096;
 
+DbEnv* _DB_ENV;
 
 //constructor
 SlottedPage::SlottedPage(Dbt &block, BlockID block_id, bool is_new) : DbBlock(block, block_id, is_new)
@@ -240,7 +241,7 @@ void HeapFile::db_open(uint flags)
   //create a db handle using db_create
   //DB* db_ptr= this->db.get_DB();
 
-  const char* dbenv_ptr;
+  //  const char* dbenv_ptr;
 
   //_DB_ENV->get_home(&dbenv_ptr);
 
@@ -269,7 +270,7 @@ void HeapFile::db_open(uint flags)
 void HeapFile::create(void)
 {
   //need to open the DB
-  this->db_open(0U);
+  this->db_open(DB_CREATE);
   //create a new block
   SlottedPage* block = this->get_new();
   this->put(block);
@@ -585,7 +586,7 @@ ValueDict* HeapTable::validate(const ValueDict* row)
     ValueDict::const_iterator column = row->find(column_name);
     Value value = column->second;
 
-    if (ca.get_data_type() != ColumnAttribute::DataType::INT || ca.get_data_type()
+    if (ca.get_data_type() != ColumnAttribute::DataType::INT && ca.get_data_type()
     != ColumnAttribute::DataType::TEXT) {
       throw DbRelationError("Only know how to marshal INT and TEXT");
     }
@@ -669,7 +670,8 @@ ValueDict* HeapTable::unmarshal(Dbt* data)
       } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
           value =  reinterpret_cast<string &>(dbtData);
       } else {
-          throw DbRelationError("Only know how to marshal INT and TEXT");
+        cout << ca.get_data_type() << endl;
+        throw DbRelationError("Only know how to marshal INT and TEXT");
       }
 
       retData->insert(pair<Identifier, Value>(column_name, value));
@@ -677,4 +679,46 @@ ValueDict* HeapTable::unmarshal(Dbt* data)
 
   return retData;
 
+}
+
+bool test_heap_storage()
+{
+  cout << "WE MADE IT \n";
+  ColumnNames column_names;
+column_names.push_back("a");
+column_names.push_back("b");
+ColumnAttributes column_attributes;
+ColumnAttribute ca(ColumnAttribute::INT);
+column_attributes.push_back(ca);
+ca.set_data_type(ColumnAttribute::TEXT);
+column_attributes.push_back(ca);
+HeapTable table1("_test_create_drop_cpp", column_names, column_attributes);
+table1.create();
+std::cout << "create ok" << std::endl;
+table1.drop();  // drop makes the object unusable because of BerkeleyDB restriction -- maybe want to fix this some day
+std::cout << "drop ok" << std::endl;
+
+HeapTable table("_test_data_cpp", column_names, column_attributes);
+table.create_if_not_exists();
+std::cout << "create_if_not_exsts ok" << std::endl;
+
+ValueDict row;
+row["a"] = Value(12);
+row["b"] = Value("Hello!");
+std::cout << "try insert" << std::endl;
+table.insert(&row);
+std::cout << "insert ok" << std::endl;
+Handles* handles = table.select();
+std::cout << "select ok " << handles->size() << std::endl;
+ValueDict *result = table.project((*handles)[0]);
+std::cout << "project ok" << std::endl;
+Value value = (*result)["a"];
+if (value.n != 12)
+  return false;
+value = (*result)["b"];
+if (value.s != "Hello!")
+  return false;
+table.drop();
+
+return true;
 }
