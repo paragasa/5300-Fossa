@@ -347,7 +347,7 @@ void HeapFile::put(DbBlock* block)
 BlockIDs* HeapFile::block_ids()
 {
   BlockIDs* results = new BlockIDs;
-  for(BlockID id=1; id<=this->last+1; id++)
+  for(BlockID id=1; id<=this->last; id++)
   {
     results->push_back(id);
   }
