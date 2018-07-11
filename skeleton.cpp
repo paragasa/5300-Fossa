@@ -2,7 +2,8 @@
 #include <string>
 #include <sys/types.h>
 #include "db_cxx.h"
-
+#include "heap_storage.h"
+#include "storage_engine.h"
 // include the sql parser
 
 #include "SQLParser.h"
@@ -19,6 +20,9 @@ string handleExpression(hsql::Expr* expr);
 string handleTable(hsql::TableRef* table);
 string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
+
+
+//DbEnv* _DB_ENV;
 
 
 int main(int argc, char* argv[])
@@ -42,7 +46,6 @@ int main(int argc, char* argv[])
 
   string envHome(path);
   DbEnv myEnv(0U);
-
   try {
     myEnv.open(envHome.c_str(), env_flags, 0);
   } catch(DbException &e) {
@@ -56,10 +59,16 @@ int main(int argc, char* argv[])
     std::cerr << e.what() << std::endl;
     exit(-1);
   }
+  cout << "GREETINGS /n";
+  _DB_ENV = &myEnv;
+  //Test Function for milestone 2
+  //test
+  test_heap_storage();
 
 
   // Begin control loop
   printf("'quit' to exit\n");
+  /*
   while(true)
   {
     printf("SQL> ");
@@ -92,7 +101,10 @@ int main(int argc, char* argv[])
       delete result;
       return -1;
     }
+
   }
+  */
+  return 0;
 }
 
 string execute(hsql::SQLParserResult* result)
@@ -129,7 +141,7 @@ string execute(hsql::SQLParserResult* result)
   }
 
   rtrnQuery += handleExpression(expr->expr);
-  
+
   switch (expr->opType) {
     case hsql::Expr::SIMPLE_OP:
       rtrnQuery += " ";
@@ -225,6 +237,7 @@ string handleTable(hsql::TableRef* table)
         fprintf(stderr, "Unrecognized expression type %d\n", table->type);
         return " ";
         break; 
+        break;
   }
   return compoundStmt;
 }
