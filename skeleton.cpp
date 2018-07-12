@@ -28,17 +28,21 @@ string handlePrintCreate(const hsql::CreateStatement* statement);
 int main(int argc, char* argv[])
 {
   string cmd, path, statement;
-
+  int milestone;
+  
   // Ensure user provides path
-  if(argc < 2)
+  if(argc < 3)
   {
-    fprintf(stderr, "Usage: ./cpsc5300 [path to a writable directory]\n");
+    fprintf(stderr, "Usage: ./cpsc5300 [path to a writable directory] [1 or 2 for Milestone Testing]\n");
     return -1;
   }
 
   // Set path to the first argument provided by the user
   path = argv[1];
 
+  // Check which milestone to test
+  milestone = stoi(argv[2]);
+  
   //Initialize DBenv flags
   u_int32_t env_flags = DB_CREATE |     // If the environment does not
                                         // exist, create it.
@@ -59,51 +63,56 @@ int main(int argc, char* argv[])
     std::cerr << e.what() << std::endl;
     exit(-1);
   }
-  cout << "GREETINGS /n";
+ 
   _DB_ENV = &myEnv;
-  //Test Function for milestone 2
-  //test
-  test_heap_storage();
+
+   if(milestone == 1)
+    {
+      // Begin control loop
+      printf("'quit' to exit\n");
+  
+      while(true)
+        {
+          printf("SQL> ");
+          getline(cin, cmd);
+
+          if(cmd == "quit")
+            {
+              return 0;
+            }
+
+          // parse a given query
+          hsql::SQLParserResult* result = hsql::SQLParser::parseSQLString(cmd);
 
 
-  // Begin control loop
-  printf("'quit' to exit\n");
-  /*
-  while(true)
+          // check whether the parsing was successful
+          if (result->isValid()) {
+            statement = execute(result);
+
+            //cout << "state";
+            cout << statement << endl;
+            delete result;
+          }
+          else
+            {
+              fprintf(stderr, "Given string is not a valid SQL query.\n");
+              fprintf(stderr, "%s (L%d:%d)\n",
+                      result->errorMsg(),
+                      result->errorLine(),
+                      result->errorColumn());
+              delete result;
+              return -1;
+            }
+
+        }
+    }
+  else if(milestone == 2)
   {
-    printf("SQL> ");
-    getline(cin, cmd);
-
-    if(cmd == "quit")
-    {
-      return 0;
-    }
-
-    // parse a given query
-    hsql::SQLParserResult* result = hsql::SQLParser::parseSQLString(cmd);
-
-
-    // check whether the parsing was successful
-    if (result->isValid()) {
-      statement = execute(result);
-
-      //cout << "state";
-      cout << statement << endl;
-      delete result;
-    }
-    else
-    {
-      fprintf(stderr, "Given string is not a valid SQL query.\n");
-      fprintf(stderr, "%s (L%d:%d)\n",
-              result->errorMsg(),
-              result->errorLine(),
-              result->errorColumn());
-      delete result;
-      return -1;
-    }
-
+    //Test Function for milestone 2
+    //test
+    cout << "Testing heap storage: " << test_heap_storage() << endl;  
   }
-  */
+  
   return 0;
 }
 

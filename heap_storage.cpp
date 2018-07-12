@@ -652,29 +652,44 @@ Dbt* HeapTable::marshal(const ValueDict* row) {
     return data;
 }
 
-// typedef std::map<Identifier, Value> ValueDict;
 ValueDict* HeapTable::unmarshal(Dbt* data)
 {
   ValueDict* retData = new ValueDict();
   uint col_num = 0;
-
+  uint offset = 0;
 
   for (auto const& column_name: this->column_names) {
 
-      ColumnAttribute ca = this->column_attributes[col_num++];
-      Value value;
-      void * dbtData = data->get_data();
+    ColumnAttribute ca = this->column_attributes[col_num++];
+    Value value;
+    void * dbtData = data->get_data();
 
-      if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
-          memcpy(&value, &dbtData, sizeof(int32_t));
-      } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
-          value =  reinterpret_cast<string &>(dbtData);
-      } else {
-        cout << ca.get_data_type() << endl;
-        throw DbRelationError("Only know how to marshal INT and TEXT");
-      }
+    if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
 
-      retData->insert(pair<Identifier, Value>(column_name, value));
+      int32_t *container = new int32_t;
+      memcpy(container, (const int32_t *) dbtData + offset, sizeof(int32_t));
+      value.n = *container;
+      offset += sizeof(int32_t);
+
+      delete container;
+    } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
+
+      u_int16_t length = *(u_int16_t*)((char *)dbtData + offset);
+      char *container = new char[length];
+
+      offset += sizeof(u_int16_t);
+ 
+      memcpy(container, (char*)dbtData + offset, length);
+      offset += length;
+
+      value.s = string(container);
+      delete [] container;
+    } else {
+      cout << ca.get_data_type() << endl;
+      throw DbRelationError("Only know how to marshal INT and TEXT");
+    }
+
+    retData->insert(pair<Identifier, Value>(column_name, value));
   }
 
   return retData;
@@ -683,7 +698,7 @@ ValueDict* HeapTable::unmarshal(Dbt* data)
 
 bool test_heap_storage()
 {
-  cout << "WE MADE IT \n";
+
   ColumnNames column_names;
 column_names.push_back("a");
 column_names.push_back("b");
@@ -713,9 +728,11 @@ std::cout << "select ok " << handles->size() << std::endl;
 ValueDict *result = table.project((*handles)[0]);
 std::cout << "project ok" << std::endl;
 Value value = (*result)["a"];
+
 if (value.n != 12)
-  return false;
+ return false;
 value = (*result)["b"];
+
 if (value.s != "Hello!")
   return false;
 table.drop();
