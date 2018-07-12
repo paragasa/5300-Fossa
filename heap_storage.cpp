@@ -15,6 +15,7 @@ typedef vector<RecordID> RecordIDs;
 //typedef vector<BlockID> BlockIDs;
 static const uint BLOCK_SZ = 4096;
 
+DbEnv* _DB_ENV;
 
 //constructor
 SlottedPage::SlottedPage(Dbt &block, BlockID block_id, bool is_new) : DbBlock(block, block_id, is_new)
@@ -238,16 +239,18 @@ void HeapFile::db_open(uint flags)
     return;
   }
   //create a db handle using db_create
-  DB* db_ptr= this->db.get_DB();
-  DB_ENV* dbenv_ptr = _DB_ENV->get_DB_ENV();
-  db_create(&db_ptr, dbenv_ptr, flags);
+  //DB* db_ptr= this->db.get_DB();
+
+  //  const char* dbenv_ptr;
+
+  //_DB_ENV->get_home(&dbenv_ptr);
+
+  //db_create(&db_ptr, _DB_ENV, flags);
   //Set the record length to the block size this is defined in storage_engine.h
   this->db.set_re_len(BLOCK_SZ);
   //set dbfilename
-  //path is normally created at the time of the environment creation
-  //hardcoded for now
 
-  this->dbfilename  = "../Data/HeapTest.db";
+  this->dbfilename  = this->name + ".db";
   //python self.dbfilename = os.path.join(_DB_ENV, self.name + '.db')
   //Null txnid is not transaction protected, 0 mode is default
   this->db.open(nullptr ,this->dbfilename.c_str(),this->name.c_str(),DB_RECNO,(u_int32_t)flags,0);
@@ -267,7 +270,7 @@ void HeapFile::db_open(uint flags)
 void HeapFile::create(void)
 {
   //need to open the DB
-  this->db_open(0U);
+  this->db_open(DB_CREATE);
   //create a new block
   SlottedPage* block = this->get_new();
   this->put(block);
@@ -344,7 +347,7 @@ void HeapFile::put(DbBlock* block)
 BlockIDs* HeapFile::block_ids()
 {
   BlockIDs* results = new BlockIDs;
-  for(BlockID id=1; id<=this->last+1; id++)
+  for(BlockID id=1; id<=this->last; id++)
   {
     results->push_back(id);
   }
@@ -361,6 +364,12 @@ BlockIDs* HeapFile::block_ids()
  *
  *  Throws exception if the table already exists
  */
+ HeapTable::HeapTable(Identifier table_name, ColumnNames column_names, ColumnAttributes column_attributes )
+   : DbRelation(table_name, column_names, column_attributes), file(table_name)
+ {
+   isCreated = false;
+ }
+
 void HeapTable::create()
 {
   if(!isCreated)
@@ -577,7 +586,7 @@ ValueDict* HeapTable::validate(const ValueDict* row)
     ValueDict::const_iterator column = row->find(column_name);
     Value value = column->second;
 
-    if (ca.get_data_type() != ColumnAttribute::DataType::INT || ca.get_data_type()
+    if (ca.get_data_type() != ColumnAttribute::DataType::INT && ca.get_data_type()
     != ColumnAttribute::DataType::TEXT) {
       throw DbRelationError("Only know how to marshal INT and TEXT");
     }
@@ -643,30 +652,90 @@ Dbt* HeapTable::marshal(const ValueDict* row) {
     return data;
 }
 
-// typedef std::map<Identifier, Value> ValueDict;
 ValueDict* HeapTable::unmarshal(Dbt* data)
 {
   ValueDict* retData = new ValueDict();
   uint col_num = 0;
-
+  uint offset = 0;
 
   for (auto const& column_name: this->column_names) {
 
-      ColumnAttribute ca = this->column_attributes[col_num++];
-      Value value;
-      void * dbtData = data->get_data();
+    ColumnAttribute ca = this->column_attributes[col_num++];
+    Value value;
+    void * dbtData = data->get_data();
 
-      if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
-          memcpy(&value, &dbtData, sizeof(int32_t));
-      } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
-          value =  reinterpret_cast<string &>(dbtData);
-      } else {
-          throw DbRelationError("Only know how to marshal INT and TEXT");
-      }
+    if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
 
-      retData->insert(pair<Identifier, Value>(column_name, value));
+      int32_t *container = new int32_t;
+      memcpy(container, (const int32_t *) dbtData + offset, sizeof(int32_t));
+      value.n = *container;
+      offset += sizeof(int32_t);
+
+      delete container;
+    } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
+
+      u_int16_t length = *(u_int16_t*)((char *)dbtData + offset);
+      char *container = new char[length];
+
+      offset += sizeof(u_int16_t);
+ 
+      memcpy(container, (char*)dbtData + offset, length);
+      offset += length;
+
+      value.s = string(container);
+      delete [] container;
+    } else {
+      cout << ca.get_data_type() << endl;
+      throw DbRelationError("Only know how to marshal INT and TEXT");
+    }
+
+    retData->insert(pair<Identifier, Value>(column_name, value));
   }
 
   return retData;
 
+}
+
+bool test_heap_storage()
+{
+
+  ColumnNames column_names;
+column_names.push_back("a");
+column_names.push_back("b");
+ColumnAttributes column_attributes;
+ColumnAttribute ca(ColumnAttribute::INT);
+column_attributes.push_back(ca);
+ca.set_data_type(ColumnAttribute::TEXT);
+column_attributes.push_back(ca);
+HeapTable table1("_test_create_drop_cpp", column_names, column_attributes);
+table1.create();
+std::cout << "create ok" << std::endl;
+table1.drop();  // drop makes the object unusable because of BerkeleyDB restriction -- maybe want to fix this some day
+std::cout << "drop ok" << std::endl;
+
+HeapTable table("_test_data_cpp", column_names, column_attributes);
+table.create_if_not_exists();
+std::cout << "create_if_not_exsts ok" << std::endl;
+
+ValueDict row;
+row["a"] = Value(12);
+row["b"] = Value("Hello!");
+std::cout << "try insert" << std::endl;
+table.insert(&row);
+std::cout << "insert ok" << std::endl;
+Handles* handles = table.select();
+std::cout << "select ok " << handles->size() << std::endl;
+ValueDict *result = table.project((*handles)[0]);
+std::cout << "project ok" << std::endl;
+Value value = (*result)["a"];
+
+if (value.n != 12)
+ return false;
+value = (*result)["b"];
+
+if (value.s != "Hello!")
+  return false;
+table.drop();
+
+return true;
 }
