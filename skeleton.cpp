@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
 {
   string cmd, path, statement;
   int milestone;
-  
+
   // Ensure user provides path
   if(argc < 3)
   {
@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
 
   // Check which milestone to test
   milestone = stoi(argv[2]);
-  
+
   //Initialize DBenv flags
   u_int32_t env_flags = DB_CREATE |     // If the environment does not
                                         // exist, create it.
@@ -63,14 +63,14 @@ int main(int argc, char* argv[])
     std::cerr << e.what() << std::endl;
     exit(-1);
   }
- 
+
   _DB_ENV = &myEnv;
 
    if(milestone == 1)
     {
       // Begin control loop
       printf("'quit' to exit\n");
-  
+
       while(true)
         {
           printf("SQL> ");
@@ -110,9 +110,9 @@ int main(int argc, char* argv[])
   {
     //Test Function for milestone 2
     //test
-    cout << "Testing heap storage: " << test_heap_storage() << endl;  
+    cout << "Testing heap storage: " << test_heap_storage() << endl;
   }
-  
+
   return 0;
 }
 
@@ -235,6 +235,8 @@ string handleTable(hsql::TableRef* table)
             case hsql::kJoinRight:
               compoundStmt += " RIGHT JOIN ";
               break;
+
+                break;
            default:
               break;
           }
@@ -242,10 +244,17 @@ string handleTable(hsql::TableRef* table)
           if (table->join->condition)
             compoundStmt += " ON " + handleExpression(table->join->condition);
           break;
+      case hsql::kTableCrossProduct:
+        for (hsql::TableRef* tbl : *table->list)
+            {
+              compoundStmt += ", ";
+              compoundStmt += handleTable(tbl);
+            }
+            break;
       default:
         fprintf(stderr, "Unrecognized expression type %d\n", table->type);
-        return " ";
-        break; 
+        return compoundStmt;
+        break;
         break;
   }
   return compoundStmt;
@@ -300,34 +309,6 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
         query += " LIMIT ";
         query += statement->limit->limit;
       }
-
-
-  /*
-  printTableRefInfo(stmt->fromTable, numIndent + 2);
-
-    if (stmt->whereClause != NULL) {
-      inprint("Search Conditions:", numIndent + 1);
-      handleExpression(stmt->whereClause, numIndent + 2);
-    }
-
-
-    if (stmt->unionSelect != NULL) {
-      inprint("Union:", numIndent + 1);
-      printSelectStatementInfo(stmt->unionSelect, numIndent + 2);
-    }
-
-    if (stmt->order != NULL) {
-      inprint("OrderBy:", numIndent + 1);
-      handleExpression(stmt->order->at(0)->expr, numIndent + 2);
-      if (stmt->order->at(0)->type == kOrderAsc) inprint("ascending", numIndent + 2);
-      else inprint("descending", numIndent + 2);
-    }
-
-    if (stmt->limit != NULL) {
-      inprint("Limit:", numIndent + 1);
-      inprint(stmt->limit->limit, numIndent + 2);
-    }
-    */
 
 
   return query;
