@@ -222,7 +222,14 @@ string handleTable(hsql::TableRef* table)
           if (table->join->condition)
             compoundStmt += " ON " + handleExpression(table->join->condition);
           break;
-      default:
+     case hsql::kTableCrossProduct:
+        for (hsql::TableRef* tbl : *table->list)
+        {
+          compoundStmt += ", ";
+          compoundStmt += handleTable(tbl);
+        }
+        break;
+     default:
         fprintf(stderr, "Unrecognized expression type %d\n", table->type);
         return " ";
         break; 
