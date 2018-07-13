@@ -3,7 +3,8 @@
 #include <string>
 #include <sys/types.h>
 #include "db_cxx.h"
-
+#include "heap_storage.h"
+#include "storage_engine.h"
 // include the sql parser
 
 #include "SQLParser.h"
@@ -21,20 +22,23 @@ string handleTable(hsql::TableRef* table);
 string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
 
-
 int main(int argc, char* argv[])
 {
   string cmd, path, statement;
+  int milestone;
 
   // Ensure user provides path
-  if(argc < 2)
+  if(argc < 3)
   {
-    fprintf(stderr, "Usage: ./cpsc5300 [path to a writable directory]\n");
+    fprintf(stderr, "Usage: ./cpsc5300 [path to a writable directory] [1 or 2 for Milestone Testing]\n");
     return -1;
   }
 
   // Set path to the first argument provided by the user
   path = argv[1];
+
+  // Check which milestone to test
+  milestone = stoi(argv[2]);
 
   //Initialize DBenv flags
   u_int32_t env_flags = DB_CREATE |     // If the environment does not
@@ -43,7 +47,6 @@ int main(int argc, char* argv[])
 
   string envHome(path);
   DbEnv myEnv(0U);
-
   try {
     myEnv.open(envHome.c_str(), env_flags, 0);
   } catch(DbException &e) {
@@ -58,44 +61,58 @@ int main(int argc, char* argv[])
     exit(-1);
   }
 
+  _DB_ENV = &myEnv;
 
-  // Begin control loop
-  printf("'quit' to exit\n");
-  while(true)
+   if(milestone == 1)
+    {
+      // Begin control loop
+      printf("'quit' to exit\n");
+
+      while(true)
+        {
+          printf("SQL> ");
+          getline(cin, cmd);
+
+          if(cmd == "quit")
+            {
+              return 0;
+            }
+
+          // parse a given query
+          hsql::SQLParserResult* result = hsql::SQLParser::parseSQLString(cmd);
+
+
+          // check whether the parsing was successful
+          if (result->isValid()) {
+            statement = execute(result);
+
+            //cout << "state";
+            cout << statement << endl;
+            delete result;
+          }
+          else
+            {
+              fprintf(stderr, "Given string is not a valid SQL query.\n");
+              fprintf(stderr, "%s (L%d:%d)\n",
+                      result->errorMsg(),
+                      result->errorLine(),
+                      result->errorColumn());
+              delete result;
+              return -1;
+            }
+
+        }
+    }
+  else if(milestone == 2)
   {
-    printf("SQL> ");
-    getline(cin, cmd);
-
-    if(cmd == "quit")
-    {
-      return 0;
-    }
-
-    // parse a given query
-    hsql::SQLParserResult* result = hsql::SQLParser::parseSQLString(cmd);
-
-
-    // check whether the parsing was successful
-    if (result->isValid()) {
-      statement = execute(result);
-
-      //cout << "state";
-      cout << statement << endl;
-      delete result;
-    }
-    else
-    {
-      fprintf(stderr, "Given string is not a valid SQL query.\n");
-      fprintf(stderr, "%s (L%d:%d)\n",
-              result->errorMsg(),
-              result->errorLine(),
-              result->errorColumn());
-      delete result;
-      return -1;
-    }
+    //Test Function for milestone 2
+    cout << "Testing heap storage: " << test_heap_storage() << endl;
   }
+
+  return 0;
 }
 
+// Main Driver, calls either select or create
 string execute(hsql::SQLParserResult* result)
 {
   string finalQuery;
@@ -122,6 +139,7 @@ string execute(hsql::SQLParserResult* result)
   return finalQuery;
 }
 
+// Handles operator expressions, accesses opType
  string handleOperatorExpression(hsql::Expr* expr) {
   string rtrnQuery = "";
 
@@ -130,7 +148,7 @@ string execute(hsql::SQLParserResult* result)
   }
 
   rtrnQuery += handleExpression(expr->expr);
-  
+
   switch (expr->opType) {
     case hsql::Expr::SIMPLE_OP:
       rtrnQuery += " ";
@@ -156,6 +174,7 @@ string execute(hsql::SQLParserResult* result)
   return rtrnQuery;
 }
 
+// Handles the Expr type
 string handleExpression(hsql::Expr* expr)
 {
   string compoundStmt;
@@ -192,6 +211,8 @@ string handleExpression(hsql::Expr* expr)
   }
 }
 
+// Handles table commands, mainly Joins, but also handles
+// Cross Product and Aliasing
 string handleTable(hsql::TableRef* table)
 {
   string compoundStmt;
@@ -215,6 +236,8 @@ string handleTable(hsql::TableRef* table)
             case hsql::kJoinRight:
               compoundStmt += " RIGHT JOIN ";
               break;
+
+                break;
            default:
               break;
           }
@@ -222,28 +245,33 @@ string handleTable(hsql::TableRef* table)
           if (table->join->condition)
             compoundStmt += " ON " + handleExpression(table->join->condition);
           break;
-     case hsql::kTableCrossProduct:
+      case hsql::kTableCrossProduct:
         for (hsql::TableRef* tbl : *table->list)
-        {
-          compoundStmt += ", ";
-          compoundStmt += handleTable(tbl);
-        }
-        break;
-     default:
+            {
+              compoundStmt += ", ";
+              compoundStmt += handleTable(tbl);
+            }
+            break;
+      default:
         fprintf(stderr, "Unrecognized expression type %d\n", table->type);
-        return " ";
-        break; 
+        return compoundStmt;
+        break;
+        break;
   }
   return compoundStmt;
 }
 
+//function that takes in a SQLStatement and returns the canonical format as a string
+//for now this should only handle SELECT
 string handlePrintSelect(const hsql::SelectStatement* statement)
 {
   string query;
 
   query += "SELECT ";
 
+  // Used to add commas
   bool firstColumn = true;
+
   for (hsql::Expr* expr : *statement->selectList)
   {
       if(firstColumn)
@@ -261,18 +289,10 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
 
    query += handleTable(statement->fromTable);
 
-  //  printTableRefInfo(stmt->fromTable, numIndent + 2);
-
   if (statement->whereClause != NULL) {
     query += " WHERE ";
       query += handleExpression(statement->whereClause);
   }
-
-
-  // if (stmt->unionSelect != NULL) {
-  //   query += " UNION "
-  //   printSelectStatementInfo(stmt->unionSelect, numIndent + 2);
-  // }
 
   if (statement->order != NULL) {
     query += " ORDER BY ";
@@ -282,38 +302,9 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
                               }
 
       if (statement->limit != NULL) {
-        // inprint("Limit:", numIndent + 1);
         query += " LIMIT ";
         query += statement->limit->limit;
       }
-
-
-  /*
-  printTableRefInfo(stmt->fromTable, numIndent + 2);
-
-    if (stmt->whereClause != NULL) {
-      inprint("Search Conditions:", numIndent + 1);
-      handleExpression(stmt->whereClause, numIndent + 2);
-    }
-
-
-    if (stmt->unionSelect != NULL) {
-      inprint("Union:", numIndent + 1);
-      printSelectStatementInfo(stmt->unionSelect, numIndent + 2);
-    }
-
-    if (stmt->order != NULL) {
-      inprint("OrderBy:", numIndent + 1);
-      handleExpression(stmt->order->at(0)->expr, numIndent + 2);
-      if (stmt->order->at(0)->type == kOrderAsc) inprint("ascending", numIndent + 2);
-      else inprint("descending", numIndent + 2);
-    }
-
-    if (stmt->limit != NULL) {
-      inprint("Limit:", numIndent + 1);
-      inprint(stmt->limit->limit, numIndent + 2);
-    }
-    */
 
 
   return query;
