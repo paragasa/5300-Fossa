@@ -1,3 +1,4 @@
+// Jared Mead and John Nguyen
 #include <stdlib.h>
 #include <string>
 #include <sys/types.h>
