@@ -21,10 +21,6 @@ string handleTable(hsql::TableRef* table);
 string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
 
-
-//DbEnv* _DB_ENV;
-
-
 int main(int argc, char* argv[])
 {
   string cmd, path, statement;
@@ -109,13 +105,13 @@ int main(int argc, char* argv[])
   else if(milestone == 2)
   {
     //Test Function for milestone 2
-    //test
     cout << "Testing heap storage: " << test_heap_storage() << endl;
   }
 
   return 0;
 }
 
+// Main Driver, calls either select or create
 string execute(hsql::SQLParserResult* result)
 {
   string finalQuery;
@@ -142,6 +138,7 @@ string execute(hsql::SQLParserResult* result)
   return finalQuery;
 }
 
+// Handles operator expressions, accesses opType
  string handleOperatorExpression(hsql::Expr* expr) {
   string rtrnQuery = "";
 
@@ -176,6 +173,7 @@ string execute(hsql::SQLParserResult* result)
   return rtrnQuery;
 }
 
+// Handles the Expr type
 string handleExpression(hsql::Expr* expr)
 {
   string compoundStmt;
@@ -212,6 +210,8 @@ string handleExpression(hsql::Expr* expr)
   }
 }
 
+// Handles table commands, mainly Joins, but also handles
+// Cross Product and Aliasing
 string handleTable(hsql::TableRef* table)
 {
   string compoundStmt;
@@ -260,13 +260,17 @@ string handleTable(hsql::TableRef* table)
   return compoundStmt;
 }
 
+//function that takes in a SQLStatement and returns the canonical format as a string
+//for now this should only handle SELECT
 string handlePrintSelect(const hsql::SelectStatement* statement)
 {
   string query;
 
   query += "SELECT ";
 
+  // Used to add commas
   bool firstColumn = true;
+
   for (hsql::Expr* expr : *statement->selectList)
   {
       if(firstColumn)
@@ -284,18 +288,10 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
 
    query += handleTable(statement->fromTable);
 
-  //  printTableRefInfo(stmt->fromTable, numIndent + 2);
-
   if (statement->whereClause != NULL) {
     query += " WHERE ";
       query += handleExpression(statement->whereClause);
   }
-
-
-  // if (stmt->unionSelect != NULL) {
-  //   query += " UNION "
-  //   printSelectStatementInfo(stmt->unionSelect, numIndent + 2);
-  // }
 
   if (statement->order != NULL) {
     query += " ORDER BY ";
@@ -305,7 +301,6 @@ string handlePrintSelect(const hsql::SelectStatement* statement)
                               }
 
       if (statement->limit != NULL) {
-        // inprint("Limit:", numIndent + 1);
         query += " LIMIT ";
         query += statement->limit->limit;
       }
