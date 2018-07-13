@@ -398,6 +398,7 @@ BlockIDs* HeapFile::block_ids()
  HeapTable::HeapTable(Identifier table_name, ColumnNames column_names, ColumnAttributes column_attributes )
    : DbRelation(table_name, column_names, column_attributes), file(table_name)
  {
+   // Used to handle Create vs Create if not exists
    isCreated = false;
  }
 
@@ -406,6 +407,8 @@ void HeapTable::create()
   if(!isCreated)
   {
     file.create();
+    // Once the file is created if Create is called again an exception will
+    // be thrown
     isCreated = true;
   }
   else
@@ -438,6 +441,7 @@ void HeapTable::create_if_not_exists()
  */
 void HeapTable::open()
 {
+  // Simply calls lower level function
   file.open();
 }
 
@@ -447,6 +451,7 @@ void HeapTable::open()
  */
 void HeapTable::close()
 {
+  // Simply calls lower level function
   file.close();
 }
 
@@ -457,6 +462,7 @@ void HeapTable::close()
  */
 void HeapTable::drop()
 {
+  // Simply calls lower level function
   file.drop();
 }
 
@@ -474,6 +480,9 @@ void HeapTable::drop()
 Handle HeapTable::insert(const ValueDict* row)
 {
   open();
+
+  // Due to heap storage all that is needed to be done is validate and append
+  // to the most recent block, may be different later
   return append(validate(row));
 }
 
@@ -520,6 +529,7 @@ void HeapTable::del(const Handle handle)
          SlottedPage* block = file.get(block_id);
          RecordIDs* record_ids = block->ids();
 
+         // returns ALL Rows
          for (auto const& record_id: *record_ids)
              handles->push_back(Handle(block_id, record_id));
 
@@ -617,6 +627,7 @@ ValueDict* HeapTable::validate(const ValueDict* row)
     ValueDict::const_iterator column = row->find(column_name);
     Value value = column->second;
 
+    // If data type not recognized throw error, else push it
     if (ca.get_data_type() != ColumnAttribute::DataType::INT && ca.get_data_type()
     != ColumnAttribute::DataType::TEXT) {
       throw DbRelationError("Only know how to marshal INT and TEXT");
@@ -638,14 +649,21 @@ Handle HeapTable::append(const ValueDict* row)
 
   try
   {
+    // Try to add block
     record_id = block->add(data);
   }
+  // block is full
   catch(DbBlockNoRoomError e)
   {
+    // clear memory
     delete block;
+
+    // Make a new block and add the data
     block = file.get_new();
     record_id = block->add(data);
   }
+
+  // Commit changes
   file.put(block);
 
   Handle retHandle = pair<BlockID, RecordID>(file.get_last_block_id(), record_id);
@@ -693,10 +711,13 @@ ValueDict* HeapTable::unmarshal(Dbt* data)
 
     ColumnAttribute ca = this->column_attributes[col_num++];
     Value value;
+
+    // retrieve the data, store
     void * dbtData = data->get_data();
 
     if (ca.get_data_type() == ColumnAttribute::DataType::INT) {
-
+      // Copy memory into container, then put information into value.n and
+      // increment the offset
       int32_t *container = new int32_t;
       memcpy(container, (const int32_t *) dbtData + offset, sizeof(int32_t));
       value.n = *container;
@@ -704,15 +725,21 @@ ValueDict* HeapTable::unmarshal(Dbt* data)
 
       delete container;
     } else if (ca.get_data_type() == ColumnAttribute::DataType::TEXT) {
-
+      // Record the length of the string
       u_int16_t length = *(u_int16_t*)((char *)dbtData + offset);
+
+      // Create a container of length of the string
       char *container = new char[length];
 
       offset += sizeof(u_int16_t);
 
+
+      // Copy data into container
+
       memcpy(container, (char*)dbtData + offset, length);
       offset += length;
 
+      // Cast data to a string, store in value s
       value.s = string(container);
       delete [] container;
     } else {
