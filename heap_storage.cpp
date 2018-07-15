@@ -292,6 +292,15 @@ void HeapFile::db_open(uint flags)
   //Null txnid is not transaction protected, 0 mode is default
   this->db.open(nullptr ,this->dbfilename.c_str(),this->name.c_str(),DB_RECNO,(u_int32_t)flags,0);
 
+  //MN: Added flag handler
+  if (flags == 0) {
+    	DB_BTREE_STAT stat;
+		this->db.stat(nullptr, &stat, DB_FAST_STAT);
+		this->last = stat.bt_ndata;
+    } else {
+    	this->last = 0;
+  }
+
   this->closed = false;
 
 }
