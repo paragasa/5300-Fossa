@@ -57,6 +57,7 @@ QueryResult *SQLExec::execute(const SQLStatement *statement) throw(SQLExecError)
     if (SQLExec::tables == nullptr)
         SQLExec::tables = new Tables();
 
+	// Determine the type of statement being asked and call correct method.
     try {
         switch (statement->type()) {
             case kStmtCreate:
@@ -73,6 +74,7 @@ QueryResult *SQLExec::execute(const SQLStatement *statement) throw(SQLExecError)
     }
 }
 
+// Set the data type for the column definitions.
 void SQLExec::column_definition(const ColumnDefinition *col, Identifier& column_name,
                                 ColumnAttribute& column_attribute) {
     column_name = col->name;
@@ -89,6 +91,7 @@ void SQLExec::column_definition(const ColumnDefinition *col, Identifier& column_
     }
 }
 
+//Create method to create new table given query user provided
 QueryResult *SQLExec::create(const CreateStatement *statement) {
     if (statement->type != CreateStatement::kTable)
         return new QueryResult("Only CREATE TABLE is implemented");
@@ -146,10 +149,12 @@ QueryResult *SQLExec::create(const CreateStatement *statement) {
 
 // DROP ...
 QueryResult *SQLExec::drop(const DropStatement *statement) {
+	// make sure the query result is a valid  drop statement. 
     if (statement->type != DropStatement::kTable)
         throw SQLExecError("unrecognized DROP type");
 
     Identifier table_name = statement->name;
+	// Make sure the user is not dropping the "_tables" or "_columns" table.
     if (table_name == Tables::TABLE_NAME || table_name == Columns::TABLE_NAME)
         throw SQLExecError("cannot drop a schema table");
 
@@ -175,6 +180,8 @@ QueryResult *SQLExec::drop(const DropStatement *statement) {
     return new QueryResult(string("dropped ") + table_name);
 }
 
+// When the user calls the show command, determine the type of show an call
+// appropraite method
 QueryResult *SQLExec::show(const ShowStatement *statement) {
     switch (statement->type) {
         case ShowStatement::kTables:
@@ -195,12 +202,15 @@ QueryResult *SQLExec::show_tables() {
     column_attributes->push_back(ColumnAttribute(ColumnAttribute::TEXT));
 
     Handles* handles = SQLExec::tables->select();
+	// The -2 comes from the additonal "_tables" and "_columns" table. 
     u_long n = handles->size() - 2;
 
     ValueDicts* rows = new ValueDicts;
     for (auto const& handle: *handles) {
         ValueDict* row = SQLExec::tables->project(handle, column_names);
         Identifier table_name = row->at("table_name").s;
+		// only add the tables to the table name vector if it is not the
+		// "_columns" or "_tables" 
         if (table_name != Tables::TABLE_NAME && table_name != Columns::TABLE_NAME)
             rows->push_back(row);
     }
