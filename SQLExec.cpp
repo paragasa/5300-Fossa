@@ -157,8 +157,88 @@ QueryResult *SQLExec::create(const CreateStatement *statement) {
 
 	return new QueryResult("created " + tableName);
 }
-	
 
+//M4 (MN): Create index method to create new table given query user provided
+QueryResult *SQLExec::create_index(const CreateIndexStatement *statement) {
+	Identifier table_name = statement->tableName;
+	ColumnNames column_names;
+	Identifier index_name = statement->indexName;  //variable type might change
+	Identifier index_type;
+	Identifier is_unique;
+	ValueDict row;
+	for (ColumnDefinition *col : *statement->columns) {
+		column_names.push_back(col->name);
+	}
+
+	try {
+		index_type = statement->indexType;
+	}
+	catch (exception& e) {
+		index_type = "BTREE";
+	}
+
+	try {
+		is_unique = bool(statement->unique);
+	}
+	catch (exception& e) {
+		is_unique = false;
+	}
+
+	DbRelation& indices = SQLExec::tables->get_table(Indices::TABLE_NAME);
+	row["table_name"] = table_name;
+	row["index_name"] = index_name;
+	row["seq_in_index"] = 0;
+	row["index_type"] = index_type;
+	row["is_unique"] = is_unique;
+
+	for (unsigned int i = 0; i < column_names.size(); i++) {
+		row["seq_in_index"].n += 1;
+		row["column_name"] = column_names.at(i);
+	}
+
+	DbRelation& index = indices.get_index(table_name, index_name);
+	//To check if index already exists?
+	index.create();
+	return new QueryResult("created " + index_name);
+
+}
+
+//M4 (MN): Show Index
+QueryResult *SQLExec::show_index(const ShowStatement *statement) {
+	Identifier table_name = statement->tableName;
+
+	//Prepare column header
+	ColumnNames* column_names = new ColumnNames;
+	column_names->push_back("table_name");
+	column_names->push_back("index_name");
+	column_names->push_back("column_name");
+	column_names->push_back("seq_in_index");
+	column_names->push_back("index_type");
+	column_names->push_back("is_unique");
+	
+	
+	DbRelation& indices = SQLExec::tables->get_table(Indices::TABLE_NAME);
+	ValueDict where;
+	where["table_name"] = Value(statement->tableName);
+	Handles* handles = indices.select(&where);
+	u_long rowNum = handles->size();
+
+	ValueDicts* rows = new ValueDicts;
+	//Use project method to get all entries of column names of the table
+	for (unsigned int i = 0; i < handles->size(); i++) {
+		ValueDict* row = indices.project(handles->at(i), column_names);
+		rows->push_back(row);
+	}
+
+	//Handle memory because select method returns the "new" pointer
+	//declared in heap
+	delete handles;
+
+	//Look at another form of QueryResult
+	return new QueryResult(column_names, colAttrs, rows,
+		" successfully returned " + to_string(rowNum) + " rows");
+
+}
 
 // DROP ...
 QueryResult *SQLExec::drop(const DropStatement *statement) {
@@ -174,19 +254,37 @@ QueryResult *SQLExec::drop(const DropStatement *statement) {
 
 	//get the table to drop
 	DbRelation& tb = SQLExec::tables->get_table(tbName);
-
-	//remove metadata about columns of this table in _columns schema table
+	
 	ValueDict where;
 	where["table_name"] = Value(tbName);
 	DbRelation& cols = SQLExec::tables->get_table(Columns::TABLE_NAME);
 	Handles* handles = cols.select(&where);
 
+
+	//M4 (MN): remove indices
+	DbRelation& indices = SQLExec::tables->get_table(Indices::TABLE_NAME);
+	Handles* index_handles = indices.select(&where);
+	vector<Value> dropIndices;
+	for (unsigned int i = 0; i < index_handles->size(); i++) {
+		ValueDict* index_attributes = indices.project(index_handles->at(i));
+		dropIndices.push_back(index_attributes->at("index_name"));
+	}
+	for (unsigned int i = 0; i < dropIndices.size(); i++) {
+		DbRelation& index = indices.get_index(table_name, index_name);
+		index.drop();
+	}
+	for (unsigned int i = 0; i < index_handles->size(); i++) {
+		indices.del(index_handles->at(i));
+	}
+
+	// remove metadata about columns of this table in _columns schema table
 	for (unsigned int i = 0; i < handles->size(); i++) {
 		cols.del(handles->at(i));
 	}
 	//Handle memory because select method returns the "new" pointer
 	//declared in heap
 	delete handles;
+	delete index_handles;
 
 	//remove table
 	tb.drop();
@@ -197,6 +295,29 @@ QueryResult *SQLExec::drop(const DropStatement *statement) {
 	return new QueryResult("dropped " + tbName); // FIXME
 }
 
+//M4 (MN): Drop Index
+QueryResult *SQLExec::drop_index(const DropIndexStatement *statement) {
+	Identifier table_name = statement->tableName;
+	Identifier index_name = statement->indexName;
+	DbRelation& indices = SQLExec::tables->get_table(Indices::TABLE_NAME);
+	DbRelation& index = indices.get_index(table_name, index_name);
+	ValueDict where;
+	where["table_name"] = table_name;
+	where["index_name"] = index_name;
+	Handles* index_handles = indices.select(&where);
+	
+	for (unsigned int i = 0; i < index_handles->size(); i++) {
+		indices.del(index_handles->at(i));
+	}
+	index.drop();
+
+	//Handle memory because select method returns the "new" pointer
+	//declared in heap
+	delete index_handles;
+
+	return new QueryResult("dropped index " + index_name);
+}
+
 QueryResult *SQLExec::show(const ShowStatement *statement) {
 	//sort out whether the statement is "SHOW TABLE.." or "SHOW COLUMNS .."
 	switch (statement->type) {
@@ -204,7 +325,8 @@ QueryResult *SQLExec::show(const ShowStatement *statement) {
 			return show_tables();
 		case ShowStatement::kColumns:
 			return show_columns(statement);
-		case ShowStatement::kIndex:  //not yet implemented
+		case ShowStatement::kIndex:  
+			return show_index(statement);
 		default:
 			throw SQLExecError("unsupported SHOW type");
 	}
