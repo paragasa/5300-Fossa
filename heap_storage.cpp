@@ -441,8 +441,15 @@ Dbt* HeapTable::marshal(const ValueDict* row) const {
 			offset += sizeof(u16);
 			memcpy(bytes+offset, value.s.c_str(), size); // assume ascii for now
 			offset += size;
-		} else {
-			throw DbRelationError("Only know how to marshal INT and TEXT");
+		}
+		else if (ca.get_data_type() == ColumnAttribute::DataType::BOOLEAN) {
+			if (offset + 1 > DbBlock::BLOCK_SZ - 1)
+				throw DbRelationError("row too big to marshal");
+			*(uint8_t*)(bytes + offset) = (uint8_t)value.n;
+			offset += sizeof(uint8_t);
+		}
+		else {
+			throw DbRelationError("Only know how to marshal INT, TEXT, and BOOLEAN");
 		}
 	}
 	char *right_size_bytes = new char[offset];
@@ -472,9 +479,14 @@ ValueDict* HeapTable::unmarshal(Dbt* data) const {
     		buffer[size] = '\0';
     		value.s = string(buffer);  // assume ascii for now
             offset += size;
-    	} else {
-            throw DbRelationError("Only know how to unmarshal INT and TEXT");
-    	}
+		}
+		else if (ca.get_data_type() == ColumnAttribute::DataType::BOOLEAN) {
+			value.n = *(uint8_t*)(bytes + offset);
+			offset += sizeof(uint8_t);
+		}
+		else {
+			throw DbRelationError("Only know how to unmarshal INT, TEXT, and BOOLEAN");
+		}
 		(*row)[column_name] = value;
     }
     return row;
