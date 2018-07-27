@@ -30,10 +30,13 @@ ostream &operator<<(ostream &out, const QueryResult &qres) {
                     case ColumnAttribute::TEXT:
                         out << "\"" << value.s << "\"";
                         break;
+<<<<<<< HEAD
 					case ColumnAttribute::BOOLEAN:
 						out << (value.n == 0 ? "false" : "true");
 						break;
 
+=======
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
                     default:
                         out << "???";
                 }
@@ -135,11 +138,16 @@ QueryResult *SQLExec::create_table(const CreateStatement *statement) {
 		column_definition(column, colName, colAttr);
 		colNames.push_back(colName);
 		colAttrs.push_back(colAttr);
+<<<<<<< HEAD
 		column = nullptr;
 		delete column;
 		
 	}
 	
+=======
+	}
+
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
 	try {
 		//update _columns schema
 		Handles cHandles;
@@ -197,6 +205,7 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 
 	//Add to schema: _indices
 	ValueDict row;
+<<<<<<< HEAD
 	
 	row["table_name"] = table_name;
 	
@@ -204,6 +213,15 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 		column_names.push_back(string(col));
 	}
 	
+=======
+	row["table_name"] = table_name;
+	SQLExec::indices->insert(&row);
+	cout << "Before loop" << endl;
+	for (ColumnDefinition *col : *statement->columns) {
+		column_names.push_back(col->name);
+	}
+
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
 	try {
 		index_type = statement->indexType;
 	}
@@ -237,12 +255,20 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 		row["seq_in_index"].n += 1;
 		row["column_name"] = column_names.at(i);
 	}
+<<<<<<< HEAD
 	
 	SQLExec::indices->insert(&row);
 	DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
 	//To check if index already exists?
 	index.create();
 	return new QueryResult("created index " + index_name);
+=======
+
+	DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
+	//To check if index already exists?
+	index.create();
+	return new QueryResult("created " + index_name);
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
 
 }
 
@@ -325,11 +351,15 @@ QueryResult *SQLExec::drop_index(const DropStatement *statement) {
 	Identifier table_name = statement->name;
 	Identifier index_name = statement->indexName;
 	
+<<<<<<< HEAD
 	cout << "Before get_index" << endl;
+=======
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
 	DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
 	ValueDict where;
 	where["table_name"] = table_name;
 	where["index_name"] = index_name;
+<<<<<<< HEAD
 
 	cout << "After get_index" << endl;
 	Handles* index_handles = SQLExec::indices->select(&where);
@@ -342,6 +372,15 @@ QueryResult *SQLExec::drop_index(const DropStatement *statement) {
 	
 
 	cout << "Before memory delete" << endl;
+=======
+	Handles* index_handles = SQLExec::indices->select(&where);
+	
+	for (unsigned int i = 0; i < index_handles->size(); i++) {
+		SQLExec::indices->del(index_handles->at(i));
+	}
+	index.drop();
+
+>>>>>>> 7e3e828b15bedc051427e5ee405ff74b72cf6311
 	//Handle memory because select method returns the "new" pointer
 	//declared in heap
 	delete index_handles;
