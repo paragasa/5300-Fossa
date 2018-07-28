@@ -1,4 +1,8 @@
-// Jared Mead and John Nguyen
+/**
+ * @file sql5300.cpp - implementation of main class 
+ * @author Jared Mead, Johnny Nguyen, Minh Nguyen, Amanda Iverson
+ * @see "Seattle University, CPSC5300, Summer 2018"
+ */
 #include <stdlib.h>
 #include <string>
 #include <sys/types.h>
