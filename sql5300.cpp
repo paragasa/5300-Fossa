@@ -18,12 +18,15 @@ using namespace std;
 
 DbEnv *_DB_ENV;
 
-string execute(hsql::SQLParserResult* result);
+void execute(hsql::SQLParserResult* result);
 string handleOperatorExpression(hsql::Expr* expr);
 string handleExpression(hsql::Expr* expr);
 string handleTable(hsql::TableRef* table);
 string handlePrintSelect(const hsql::SelectStatement* statement);
 string handlePrintCreate(const hsql::CreateStatement* statement);
+string handlePrintShow(const hsql::ShowStatement * statement);
+string handlePrintDrop(const hsql::DropStatement * statement);
+string handlePrintInsert(const hsql::InsertStatement * statement);
 
 int main(int argc, char* argv[])
 {
@@ -32,7 +35,7 @@ int main(int argc, char* argv[])
   //Ensure user provides path
   if(argc < 2)
   {
-    fprintf(stderr, "Usage: ./cpsc5300 [path to a writable directory]\n");
+    fprintf(stderr, "Usage: ./sql5300 [path to a writable directory]\n");
     return -1;
   }
 
@@ -80,10 +83,7 @@ int main(int argc, char* argv[])
 
 			  // check whether the parsing was successful
 			  if (result->isValid()) {
-				  statement = execute(result);
-
-				  //cout << "state";
-				  cout << statement << endl;
+				  execute(result);
 				  delete result;
 			  }
 			  else
@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
 }
 
 // Main Driver, calls either select or create
-string execute(hsql::SQLParserResult* result)
+void execute(hsql::SQLParserResult* result)
 {
   string finalQuery;
 
@@ -124,11 +124,21 @@ string execute(hsql::SQLParserResult* result)
       case hsql::kStmtCreate:
         finalQuery = handlePrintCreate((const hsql::CreateStatement*) statement);
         break;
-	//Handle other statements using Lundeen's parsetree
+	  case hsql::kStmtDrop:
+		  finalQuery = handlePrintDrop((const hsql::DropStatement*) statement);
+		 break;
+	  case hsql::kStmtShow:
+		  finalQuery = handlePrintShow((const hsql::ShowStatement*) statement);
+		  break;
+	  case hsql::kStmtInsert:
+		  finalQuery = handlePrintInsert((const hsql::InsertStatement*) statement);
+		  break;
       default:
-		cout << ParseTreeToString::statement(statement) << endl;
+		finalQuery = "Unsupported query";
         break;
     }
+
+	cout << finalQuery << endl;
 	
 	try {
 		QueryResult *ret = SQLExec::execute(statement);
@@ -136,12 +146,12 @@ string execute(hsql::SQLParserResult* result)
 		delete ret;
 	}
 	catch (SQLExecError& e) {
-		cout << "Error: " << e.what() << endl;
+		cout << "\nError: " << e.what() << endl;
 	}
 
   }
 
-  return finalQuery;
+ 
 }
 
 // Handles operator expressions, accesses opType
@@ -325,59 +335,130 @@ string handlePrintCreate(const hsql::CreateStatement* statement)
   switch(statement->type)
   {
     //Create for table
-    case hsql::CreateStatement::kTable:
-      query += "TABLE ";
-      break;
-    //Add other creates here like create database
+  case hsql::CreateStatement::kTable:
+  {
+	  query += "TABLE ";
+	  if (statement->ifNotExists)
+	  {
+		  query += "IF NOT EXISTS ";
+	  }
+
+	  //Create table specific stuff
+	  if (statement->tableName != NULL)
+	  {
+		  query += statement->tableName;
+		  query += " (";
+	  }
+
+
+	  if (statement->columns != NULL)
+	  {
+		  bool firstColumn = true;
+		  for (hsql::ColumnDefinition* column : *statement->columns) {
+			  if (firstColumn)
+			  {
+				  firstColumn = false;
+			  }
+			  else {
+				  query += ", ";
+			  }
+			  query += column->name;
+			  switch (column->type)
+			  {
+			  case hsql::ColumnDefinition::TEXT:
+				  query += " TEXT";
+				  break;
+			  case hsql::ColumnDefinition::INT:
+				  query += " INT";
+				  break;
+			  case hsql::ColumnDefinition::DOUBLE:
+				  query += " DOUBLE";
+				  break;
+
+			  default:
+				  fprintf(stderr, "Unsupported Column type %d\n", column->type);
+				  break;
+			  }
+
+		  }
+		  query += ")";
+	  }
+  }
+	  break;
+    
+	//Create for index
+  case hsql::CreateStatement::kIndex:
+	{
+		query += "INDEX ";
+		query += string(statement->indexName) + " ON ";
+		query += string(statement->tableName) + " USING " + statement->indexType
+			+ " (";
+		bool doComma = false;
+		for (auto const& col : *statement->indexColumns) {
+			if (doComma)
+				query += ", ";
+			query += string(col);
+			doComma = true;
+		}
+		query += ")";
+	}
+		break;
+
     default:
       fprintf(stderr, "Unsupported CREATE type %d\n", statement->type);
       break;
-  }
-  if(statement->ifNotExists)
-  {
-    query += "IF NOT EXISTS ";
-  }
-
-  //Create table specific stuff
-  if(statement->tableName != NULL)
-  {
-    query += statement->tableName;
-    query += " (";
-  }
-
-
-  if(statement->columns !=NULL)
-  {
-    bool firstColumn = true;
-    for (hsql::ColumnDefinition* column : *statement->columns) {
-        if(firstColumn)
-        {
-          firstColumn=false;
-        }
-        else{
-          query +=", ";
-        }
-        query += column->name;
-        switch(column->type)
-        {
-          case hsql::ColumnDefinition::TEXT:
-            query += " TEXT";
-            break;
-          case hsql::ColumnDefinition::INT:
-            query += " INT";
-            break;
-          case hsql::ColumnDefinition::DOUBLE:
-            query += " DOUBLE";
-            break;
-
-          default:
-            fprintf(stderr, "Unsupported Column type %d\n", column->type);
-            break;
-        }
-
-    }
-    query += ")";
+  
+ 
   }
 
   return query;
+}
+
+//function that takes in a SQLStatement and returns the canonical format as a string
+//for now this should handle SHOW statements
+string handlePrintShow(const hsql::ShowStatement* statement)
+{
+	string query = "SHOW ";
+	switch (statement->type) {
+	case hsql::ShowStatement::kTables:
+		query += "TABLES";
+		break;
+	case hsql::ShowStatement::kColumns:
+		query += "COLUMNS FROM " + string(statement->tableName);
+		break;
+	case hsql::ShowStatement::kIndex:
+		query += "INDEX FROM " + string(statement->tableName);
+		break;
+	default:
+		query += "??";
+		break;
+	}
+	return query;
+}
+
+//function that takes in a SQLStatement and returns the canonical format as a string
+//for now this should handle DROP statements
+string handlePrintDrop(const hsql::DropStatement* statement)
+{
+	string query = "DROP ";
+	switch (statement->type) {
+	case hsql::DropStatement::kTable:
+		query += "TABLE ";
+		break;
+	case hsql::DropStatement::kIndex:
+		query += "INDEX " + string(statement->indexName) + " FROM ";
+		break;
+	default:
+		query += "? ";
+	}
+	query += statement->name;
+	return query;
+}
+
+//FIX ME: function that takes in a SQLStatement and returns the canonical format as a string
+//for now this should handle INSERT statements
+string handlePrintInsert(const hsql::InsertStatement* statement)
+{
+	string query = "INSERT ...";
+	return query;
 }

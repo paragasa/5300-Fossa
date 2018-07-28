@@ -30,6 +30,10 @@ ostream &operator<<(ostream &out, const QueryResult &qres) {
                     case ColumnAttribute::TEXT:
                         out << "\"" << value.s << "\"";
                         break;
+					case ColumnAttribute::BOOLEAN:
+						out << (value.n == 0 ? "false" : "true");
+						break;
+
                     default:
                         out << "???";
                 }
@@ -116,10 +120,11 @@ QueryResult *SQLExec::create_table(const CreateStatement *statement) {
 	if (statement->type != CreateStatement::kTable)
 		return new QueryResult("Only handle CREATE TABLE");
 
-	//update _tables schema
+	
 	Identifier tableName = statement->tableName;
 	ValueDict row;
 	row["table_name"] = tableName;
+	//update _tables schema
 	Handle tHandle = SQLExec::tables->insert(&row);
 
 	//Get columns to udate _columns schema
@@ -130,9 +135,9 @@ QueryResult *SQLExec::create_table(const CreateStatement *statement) {
 	for (ColumnDefinition* column : *statement->columns) {
 		column_definition(column, colName, colAttr);
 		colNames.push_back(colName);
-		colAttrs.push_back(colAttr);
+		colAttrs.push_back(colAttr);	
 	}
-
+	
 	try {
 		//update _columns schema
 		Handles cHandles;
@@ -190,13 +195,10 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 
 	//Add to schema: _indices
 	ValueDict row;
+	
 	row["table_name"] = table_name;
-	SQLExec::indices->insert(&row);
-	cout << "Before loop" << endl;
-	for (ColumnDefinition *col : *statement->columns) {
-		column_names.push_back(col->name);
-	}
-
+	
+	
 	try {
 		index_type = statement->indexType;
 	}
@@ -204,13 +206,6 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 		index_type = "BTREE";
 	}
 
-	/**
-	try {
-		is_unique = bool(statement->unique);
-	}
-	catch (exception& e) {
-		is_unique = false;
-	}*/
 
 	if (index_type == "BTREE") {
 		is_unique = true;
@@ -218,7 +213,6 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 	else {
 		is_unique = false;
 	}
-
 	
 	row["table_name"] = table_name;
 	row["index_name"] = index_name;
@@ -226,15 +220,33 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 	row["index_type"] = index_type;
 	row["is_unique"] = is_unique;
 
-	for (unsigned int i = 0; i < column_names.size(); i++) {
-		row["seq_in_index"].n += 1;
-		row["column_name"] = column_names.at(i);
-	}
+	Handles iHandles;
+	//Catching errror when inserting each row to _indices schema table
+	try {
+		for (auto const& col : *statement->indexColumns) {
+			row["seq_in_index"].n += 1;
+			row["column_name"] = string(col);
+			iHandles.push_back(SQLExec::indices->insert(&row));
+		}
 
-	DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
-	//To check if index already exists?
-	index.create();
-	return new QueryResult("created " + index_name);
+		
+		DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
+		index.create();
+	}
+	catch (exception& e) {
+		try {
+			for (unsigned int i = 0; i < iHandles.size(); i++) {
+				SQLExec::indices->del(iHandles.at(i));
+			}
+		}
+		catch (...) {
+
+		}
+		
+		throw;
+	}
+	
+	return new QueryResult("created index " + index_name);
 
 }
 
@@ -316,18 +328,19 @@ QueryResult *SQLExec::drop_index(const DropStatement *statement) {
 
 	Identifier table_name = statement->name;
 	Identifier index_name = statement->indexName;
-	
 	DbIndex& index = SQLExec::indices->get_index(table_name, index_name);
 	ValueDict where;
 	where["table_name"] = table_name;
 	where["index_name"] = index_name;
-	Handles* index_handles = SQLExec::indices->select(&where);
+
 	
+	Handles* index_handles = SQLExec::indices->select(&where);
+	index.drop();
 	for (unsigned int i = 0; i < index_handles->size(); i++) {
 		SQLExec::indices->del(index_handles->at(i));
 	}
-	index.drop();
 
+	
 	//Handle memory because select method returns the "new" pointer
 	//declared in heap
 	delete index_handles;
