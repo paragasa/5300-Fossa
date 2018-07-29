@@ -15,7 +15,6 @@
 #include "SQLParser.h"
 
 // contains printing utilities
-
 #include "sqlhelper.h"
 
 using namespace std;
@@ -98,16 +97,9 @@ int main(int argc, char* argv[])
 					  result->errorLine(),
 					  result->errorColumn());
 				  delete result;
-				  //MN: Continue the next loop, instead of disrupting the whole program
-				  //return -1;
 			  }
 		  }
-
-          
-
   }
-  
-  
   return 0;
 }
 
@@ -153,9 +145,7 @@ void execute(hsql::SQLParserResult* result)
 		cout << "\nError: " << e.what() << endl;
 	}
 
-  }
-
- 
+  } 
 }
 
 // Handles operator expressions, accesses opType
@@ -230,7 +220,7 @@ string handleExpression(hsql::Expr* expr)
   }
 }
 
-// Handles table commands, mainly Joins, but also handles
+// Handles table commands, mainly joins, but also handles
 // Cross Product and Aliasing
 string handleTable(hsql::TableRef* table)
 {
@@ -459,7 +449,7 @@ string handlePrintDrop(const hsql::DropStatement* statement)
 	return query;
 }
 
-//FIX ME: function that takes in a SQLStatement and returns the canonical format as a string
+//Function that takes in a SQLStatement and returns the canonical format as a string
 //for now this should handle INSERT statements
 string handlePrintInsert(const hsql::InsertStatement* statement)
 {
