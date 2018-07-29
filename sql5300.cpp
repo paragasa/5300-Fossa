@@ -450,7 +450,7 @@ string handlePrintDrop(const hsql::DropStatement* statement)
 }
 
 //Function that takes in a SQLStatement and returns the canonical format as a string
-//for now this should handle INSERT statements
+//for now this should handle INSERT statements 
 string handlePrintInsert(const hsql::InsertStatement* statement)
 {
 	string query = "INSERT ...";

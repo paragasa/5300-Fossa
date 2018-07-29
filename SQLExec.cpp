@@ -345,7 +345,7 @@ QueryResult *SQLExec::drop_table(const DropStatement *statement) {
 	delete handles;
 	delete index_handles;
 
-	//remove table
+	//remove table 
 	tb.drop();
 
 	//remove metadata about this table in _tables schema table
