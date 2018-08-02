@@ -3,6 +3,7 @@
  * @author Kevin Lundeen, Minh Nguyen, Amanda Iverson
  * @see "Seattle University, CPSC5300, Summer 2018"
  */
+#include <algorithm>
 #include "SQLExec.h"
 using namespace std;
 using namespace hsql;
@@ -81,6 +82,12 @@ QueryResult *SQLExec::execute(const SQLStatement *statement) throw(SQLExecError)
 			return drop((const DropStatement *)statement);
 		case kStmtShow:
 			return show((const ShowStatement *)statement);
+		case kStmtInsert:
+			return insert((const InsertStatement *) statement);
+		case kStmtDelete:
+			return del((const DeleteStatement *) statement);
+		case kStmtSelect:
+			return select((const SelectStatement *) statement);
 		default:
 			return new QueryResult("not implemented");
 		}
@@ -90,6 +97,19 @@ QueryResult *SQLExec::execute(const SQLStatement *statement) throw(SQLExecError)
 		throw SQLExecError(string("DbRelationError: ") + e.what());
 	}
 }
+
+QueryResult *SQLExec::insert(const InsertStatement *statement){
+    return new QueryResult("INSERT statement not yet implemented");
+}
+
+QueryResult *SQLExec::del(const DeleteStatement *statement){
+    return new QueryResult("DELETE statement not yet implemented");
+}
+
+QueryResult *SQLExec::select(const SelectStatement *statement){
+    return new QueryResult("SELECT statement not yet implemented");
+}
+
 
 void SQLExec::column_definition(const ColumnDefinition *col, Identifier& column_name,
 	ColumnAttribute& column_attribute) {
@@ -201,7 +221,7 @@ QueryResult *SQLExec::create_table(const CreateStatement *statement) {
 	return new QueryResult("created " + tableName);
 }
 
-//M4 Create index method to create new table given query user provided
+//M4 Create index method to create new table given query user provide
 QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 
 	//Double check if statement is CREATE INDEX
@@ -218,7 +238,6 @@ QueryResult *SQLExec::create_index(const CreateStatement *statement) {
 	ValueDict row;
 
 	row["table_name"] = table_name;
-
 
 	try {
 		index_type = statement->indexType;
