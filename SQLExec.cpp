@@ -99,7 +99,48 @@ QueryResult *SQLExec::execute(const SQLStatement *statement) throw(SQLExecError)
 }
 
 QueryResult *SQLExec::insert(const InsertStatement *statement){
-    return new QueryResult("INSERT statement not yet implemented");
+    Identifier tableName = statement->tableName;
+    DbRelation& targetTable = SQLExec::tables->get_table(tableName);
+    ColumnNames columns;
+    ColumnAttributes attributes;
+    string message;
+
+    if(statement->columns != NULL){
+	for(auto const& column : *statement->columns){
+	    columns.push_back(column);
+	}
+    }
+    else{
+	columns = targetTable.get_column_names();
+    }
+
+
+
+    ValueDict row;
+    int i = 0;
+    for (auto const& value : *statement->values){
+	if(value->type == kExprLiteralInt){
+	    row[columns[i]] = Value(value->ival);
+	}
+	else{
+	    row[columns[i]] = Value(value->name);
+	}
+	i++;
+    }
+    Handle handle = targetTable.insert(&row);
+
+    IndexNames indices = SQLExec::indices->get_index_names(tableName);
+    for (auto const& index : indices){
+	DbIndex& newIndex = SQLExec::indices->get_index(tableName, index);
+	newIndex.insert(handle);
+    } //check this, how it is done in python but seems too short
+
+    message += "Successfully inserted 1 row into " + tableName;
+    if(!indices.empty()){
+	message += " and from " + to_string(indices.size()) + " indices.";
+    }
+ 
+    return new QueryResult(message);
 }
 
 QueryResult *SQLExec::del(const DeleteStatement *statement){
