@@ -13,24 +13,25 @@
 /**
  * @class SQLExecError - exception for SQLExec methods
  */
-class SQLExecError : public std::runtime_error {
-public:
+class SQLExecError : public std::runtime_error
+{
+  public:
     explicit SQLExecError(std::string s) : runtime_error(s) {}
 };
-
 
 /**
  * @class QueryResult - data structure to hold all the returned data for a query execution
  */
-class QueryResult {
-public:
+class QueryResult
+{
+  public:
     QueryResult() : column_names(nullptr), column_attributes(nullptr), rows(nullptr), message("") {}
 
     QueryResult(std::string message) : column_names(nullptr), column_attributes(nullptr), rows(nullptr),
                                        message(message) {}
 
     QueryResult(ColumnNames *column_names, ColumnAttributes *column_attributes, ValueDicts *rows, std::string message)
-            : column_names(column_names), column_attributes(column_attributes), rows(rows), message(message) {}
+        : column_names(column_names), column_attributes(column_attributes), rows(rows), message(message) {}
 
     virtual ~QueryResult();
 
@@ -40,32 +41,32 @@ public:
     const std::string &get_message() const { return message; }
     friend std::ostream &operator<<(std::ostream &stream, const QueryResult &qres);
 
-protected:
+  protected:
     ColumnNames *column_names;
     ColumnAttributes *column_attributes;
     ValueDicts *rows;
     std::string message;
 };
 
-
 /**
  * @class SQLExec - execution engine
  */
-class SQLExec {
-public:
-	/**
+class SQLExec
+{
+  public:
+    /**
 	 * Execute the given SQL statement.
 	 * @param statement   the Hyrise AST of the SQL statement to execute
 	 * @returns           the query result (freed by caller)
 	 */
     static QueryResult *execute(const hsql::SQLStatement *statement) throw(SQLExecError);
 
-protected:
-	// the one place in the system that holds the _tables table and _indices table
+  protected:
+    // the one place in the system that holds the _tables table and _indices table
     static Tables *tables;
-	static Indices *indices;
+    static Indices *indices;
 
-	// recursive decent into the AST
+    // recursive decent into the AST
     static QueryResult *create(const hsql::CreateStatement *statement);
     static QueryResult *create_table(const hsql::CreateStatement *statement);
     static QueryResult *create_index(const hsql::CreateStatement *statement);
@@ -83,7 +84,9 @@ protected:
     static QueryResult *del(const hsql::DeleteStatement *statement);
     static QueryResult *select(const hsql::SelectStatement *statement);
 
-	/**
+    static ValueDict *get_where_conjunction(std::string table_name, hsql::Expr *expression);
+    static bool ensure_table_exist(Identifier table_name);
+    /**
 	 * Pull out column name and attributes from AST's column definition clause
 	 * @param col                AST column definition
 	 * @param column_name        returned by reference
@@ -91,4 +94,3 @@ protected:
 	 */
     static void column_definition(const hsql::ColumnDefinition *col, Identifier &column_name, ColumnAttribute &column_attribute);
 };
-
